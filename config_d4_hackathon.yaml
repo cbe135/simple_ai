@@ -1,0 +1,56 @@
+# D4 Hackathon preset
+# Run with: python src/main.py --task d4_hackathon --group-num 8
+
+task: d4_hackathon
+
+environ:
+  config_file: config.yaml
+  seed: 42
+  data_name: Chest_Xray
+  group_num: 8
+
+data:
+  train_percentage: 0.7
+  val_percentage: 0.15
+  test_percentage: 0.15
+  spatial_size:
+  - 224
+  - 224
+  repeats: 2
+  rotate_range:
+  - - 0.17453292519943295
+    - 0.3490658503988659
+  shear_range:
+  - - 0
+    - 0
+  - - 0
+    - 0
+  translate_range:
+  - - 30
+    - 60
+  - - 30
+    - 60
+  scale_range:
+  - - 0.0001
+    - 0.0001
+  - - 0.0001
+    - 0.0001
+  affine_prob: 0.5
+  spatial_axis:
+  - 0
+  - 1
+  flip_prob: 0.5
+  a_min: -125
+  a_max: 200
+  cache_rate: 1
+
+img_cnt: 5
+
+training:
+  num_epoch: 10
+  batch_size: 16
+  lr: 0.001
+  timm_model: resnet18
+  num_classes: 1
+
+threshold: 0.5

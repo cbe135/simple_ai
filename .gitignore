@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.env
+.venv
+venv/
+*.pth
+*.yaml
+!config.yaml
+!config_d4_hackathon.yaml
+.ipynb_checkpoints/
+*.log
