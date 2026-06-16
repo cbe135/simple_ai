@@ -1,0 +1,5 @@
+# Place this file as dataset_info.yaml inside your data directory
+# alongside data_list.yaml and images/ and masks/
+#
+# For D3 Liver CT data:
+modality: CT

@@ -1,19 +1,27 @@
 # D3/D4 Hands-on: CNN Classification
 
-Multi-task CNN classification pipeline supporting both D3 (Liver CT) and D4 (Chest X-ray Hackathon) using MONAI + PyTorch + timm.
+Multi-task CNN classification pipeline using MONAI + PyTorch + timm. **All behavior is data-driven** — no hardcoded task names. The pipeline reads configuration from YAML files and derives transform pipelines from the data itself.
 
 **2026 Winter — Last modified: 2025/12/17**
 
-## Overview
+## How It Works
 
-This repository contains hands-on tutorials for medical image classification using CNNs:
+Every dataset ships with:
 
-| Task | Data | Format | Description |
-|---|---|---|---|
-| **D3 Liver CT** | NIfTI (.nii.gz) | CT images + masks | Classify liver tumors |
-| **D4 Hackathon** | JPG images | Chest X-rays | Classify 5 diseases (Atelectasis, Cardiomegaly, Colon_Polyp, Diabetic_Retinopathy, Melanoma) |
+```
+data_dir/
+├── data_list.yaml        # image/mask/label entries
+├── dataset_info.yaml     # modality: CT | X-ray | MRI | ...
+├── images/               # image files
+└── masks/                # (optional) mask files
+```
 
-Both tasks share the same training pipeline but differ in data loading, preprocessing, and augmentation.
+The pipeline automatically derives:
+- **Reader** — from file extensions (`.nii.gz` → NIfTI, `.jpg`/`.png` → PIL)
+- **Has masks** — from whether `data_list.yaml` entries contain a `"mask"` key
+- **Preprocessing** — from modality in `dataset_info.yaml` (CT → windowing + mask + resize; X-ray → resize only)
+
+No `if task == ...` anywhere in code.
 
 ## Quick Start
 
@@ -22,59 +30,39 @@ Both tasks share the same training pipeline but differ in data loading, preproce
 - Python >= 3.10
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
 
-### One-liner (D3 Liver CT)
+### D3 Liver CT (default)
 
 ```bash
-git clone https://github.com/cbe135/d3-hands-on-liver-classification.git && cd d3-hands-on-liver-classification && uv sync && uv run python src/main.py
-```
-
-### One-liner (D4 Hackathon)
-
-```bash
-git clone https://github.com/cbe135/d3-hands-on-liver-classification.git && cd d3-hands-on-liver-classification && uv sync && uv run python src/main.py --task d4_hackathon --group-num 8
-```
-
-### Step-by-step
-
-```bash
-# 1. Clone the repo
 git clone https://github.com/cbe135/d3-hands-on-liver-classification.git
 cd d3-hands-on-liver-classification
-
-# 2. Install dependencies
 uv sync
-
-# 3a. Run D3 (Liver CT)
 uv run python src/main.py
-
-# 3b. Run D4 (Chest X-ray, group 8)
-uv run python src/main.py --task d4_hackathon --group-num 8
 ```
 
-Or with pip:
+### D4 Chest X-ray Hackathon
 
 ```bash
-pip install -r requirements.txt
-python src/main.py --task d4_hackathon --group-num 8
+git clone https://github.com/cbe135/d3-hands-on-liver-classification.git
+cd d3-hands-on-liver-classification
+uv sync
+uv run python src/main.py --config config_d4_hackathon.yaml
 ```
 
-## CLI Arguments
+### One-liner
 
-| Argument | Choices | Default | Description |
-|---|---|---|---|
-| `--task` | `d3_liver_ct`, `d4_hackathon` | `d3_liver_ct` | Task type |
-| `--group-num` | 1–15 | 1 | Group number for D4 (determines disease class) |
-| `--config` | file path | None | Override with custom config YAML |
+```bash
+git clone https://github.com/cbe135/d3-hands-on-liver-classification.git && cd d3-hands-on-liver-classification && uv sync && uv run python src/main.py --config config_d4_hackathon.yaml
+```
 
-### D4 Disease Mapping
+## CLI
 
-| Group | Disease |
+```
+python src/main.py [--config CONFIG_FILE]
+```
+
+| Argument | Description |
 |---|---|
-| 1, 6, 11 | Atelectasis |
-| 2, 7, 12 | Cardiomegaly |
-| 3, 8, 13 | Colon_Polyp |
-| 4, 9, 14 | Diabetic_Retinopathy |
-| 5, 10, 15 | Melanoma |
+| `--config` | Path to config YAML (default: `config.yaml`) |
 
 ## Project Structure
 
@@ -82,8 +70,10 @@ python src/main.py --task d4_hackathon --group-num 8
 ├── README.md
 ├── pyproject.toml                    # uv project config
 ├── requirements.txt                  # pip dependencies
-├── config.yaml                       # D3 default hyperparameters
-├── config_d4_hackathon.yaml          # D4 preset
+├── config.yaml                       # D3 Liver CT defaults
+├── config_d4_hackathon.yaml          # D4 Chest X-ray preset
+├── dataset_info_d3_liver_ct.yaml     # Example: modality: CT
+├── dataset_info_d4_hackathon.yaml    # Example: modality: X-ray
 ├── environment.md                    # Environment setup guide
 ├── 01-introduction.md                # Background & learning objectives
 ├── 02-setup-and-dependencies.md      # Install & imports
@@ -95,59 +85,86 @@ python src/main.py --task d4_hackathon --group-num 8
 ├── 08-evaluation.md                  # ROC, AUC, confusion matrix, Grad-CAM
 ├── src/
 │   ├── __init__.py
-│   ├── env_setup.py                  # Environment detection & data setup
+│   ├── env_setup.py                  # Environment detection + data download
 │   ├── config.py                     # Config load/save
 │   ├── data.py                       # Data loading & splitting
-│   ├── transforms.py                 # Task-aware transform pipelines
+│   ├── transforms.py                 # Data-driven transform pipelines
 │   ├── model.py                      # Model & optimizer creation
 │   ├── train.py                      # Training loop
 │   ├── evaluate.py                   # Inference, ROC, Grad-CAM
 │   ├── utils.py                      # Plotting helpers
-│   └── main.py                       # CLI entry point with --task support
-└── D3_Hands_on_2026_v2.ipynb         # Launcher notebook (task-selectable)
+│   └── main.py                       # CLI entry point
+└── D3_Hands_on_2026_v2.ipynb         # Launcher notebook
 ```
 
-## Task Differences
+## Data Setup
 
-| Aspect | D3 (Liver CT) | D4 (Chest X-ray) |
-|---|---|---|
-| Data format | ZIP → NIfTI | tar.gz → JPG |
-| Loader | `LoadImaged(keys=['image','mask'])` | `LoadImaged(keys=['image'], reader='pilreader')` |
-| Has masks | Yes | No |
-| Preprocessing | Resize + CT windowing + MaskIntensity + RepeatChanneld | Resize + RepeatChanneld |
-| Augmentation | RandAffined (prob=0) | RandAffined (prob=0.5) + GaussianNoise |
-| Data source | Google Drive ZIP (3 links) | gdown tar.gz by group number |
+Each dataset needs:
+
+### 1. `data_list.yaml`
+
+```yaml
+data:
+  - image: "path/to/image1.nii.gz"
+    mask: "path/to/mask1.nii.gz"    # omit if no masks
+    label: 0
+  - image: "path/to/image2.nii.gz"
+    mask: "path/to/mask2.nii.gz"
+    label: 1
+```
+
+### 2. `dataset_info.yaml`
+
+```yaml
+modality: CT    # CT | X-ray | MRI | ...
+```
+
+The modality determines preprocessing:
+
+| Modality | Preprocessing |
+|---|---|
+| `CT` | Resize + CT windowing (`a_min`/`a_max`) + MaskIntensity + RepeatChannel |
+| `X-ray` / `MRI` / other | Resize + RepeatChannel |
+
+### 3. Config YAML
+
+Specify data source for auto-download:
+
+```yaml
+environ:
+  data_name: liver_data
+  data_source:
+    file_ids: ["1LNkFfchl4YwKzLJ5SVDovhyvmw6vUUMf"]
+    archive_format: zip    # zip or tar.gz
+```
+
+Or place your data manually in the working directory.
+
+## Adding a New Dataset
+
+1. Prepare `data_list.yaml` + `dataset_info.yaml` + image files
+2. Create a config YAML with your data source and hyperparameters
+3. Run: `python src/main.py --config your_config.yaml`
+
+No code changes needed.
 
 ## Supported Environments
 
 | Environment | Status | Notes |
 |---|---|---|
-| Google Colab | Supported | D3: Drive mount; D4: auto-download via gdown |
+| Google Colab | Supported | Auto-downloads via gdown; GPU recommended |
 | Kaggle | Supported | Upload data as Kaggle Dataset |
-| Local | Supported | Auto-downloads data via gdown |
-
-See [environment.md](environment.md) for detailed setup instructions.
-
-## Adding a New Task
-
-To add a new dataset/task:
-
-1. **Add a config file** `config_<task_name>.yaml` with your hyperparameters
-2. **Add `task` key** to the config: `task: <task_name>`
-3. **Update `src/transforms.py`**: Add a branch in `get_loaders()`, `get_preprocess()`, and `get_augmentation()` for your task
-4. **Update `src/env_setup.py`**: Add a `_setup_data_<task>()` function
-5. **Update `src/main.py`**: Add defaults in `get_default_args()`
-6. **Run**: `python src/main.py --task <task_name>`
-
-The modular `src/` design makes this straightforward — each module checks `args["task"]` to dispatch to the correct logic.
+| Local | Supported | Auto-downloads via gdown or place data manually |
 
 ## Configuration
 
-All parameters are defined in `config.yaml` or in the `args` dictionary. Key parameters:
+All parameters are in the config YAML. Key parameters:
 
 | Parameter | D3 Default | D4 Default | Description |
 |---|---|---|---|
-| `task` | `d3_liver_ct` | `d4_hackathon` | Task type |
+| `data_name` | `liver_data` | `Atelectasis` | Data directory name |
+| `data_source.file_ids` | 3 IDs | 1 ID | Google Drive file IDs |
+| `data_source.archive_format` | `zip` | `tar.gz` | Archive type |
 | `seed` | 888 | 42 | Random seed |
 | `spatial_size` | [250, 250] | [224, 224] | Image resize dimensions |
 | `a_min/a_max` | -125/200 | -125/200 | CT window range (HU) |
@@ -155,12 +172,17 @@ All parameters are defined in `config.yaml` or in the `args` dictionary. Key par
 | `batch_size` | 128 | 16 | Batch size |
 | `lr` | 0.001 | 0.001 | Learning rate |
 | `timm_model` | resnet18 | resnet18 | Model architecture |
-| `threshold` | 0.5 | 0.5 | Classification threshold |
 
-## Datasets
+## Dependencies
 
-- **D3**: [Medical Segmentation Decathlon](http://medicaldecathlon.com/) — Liver CT data via Google Drive
-- **D4**: Chest X-ray data (Atelectasis, Cardiomegaly, etc.) via gdown
+| Package | Purpose |
+|---|---|
+| MONAI | Medical imaging preprocessing & data loading |
+| PyTorch | Deep learning framework |
+| timm | Pretrained models (ResNet-18) |
+| scikit-learn | Evaluation metrics |
+| matplotlib | Visualization |
+| gdown | Google Drive data download |
 
 ## License
 

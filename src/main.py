@@ -1,10 +1,14 @@
 """
-D3/D4 Hands-on: CNN Classification Pipeline
-Supports both D3 (Liver CT) and D4 (Chest X-ray Hackathon) tasks.
+CNN Classification Pipeline
+
+Entry point for end-to-end training. All behavior is driven by:
+  - config YAML (data source, hyperparameters)
+  - dataset_info.yaml in the data directory (modality)
+  - data_list.yaml structure (has_masks, image format)
 
 Usage:
-    python src/main.py                          # D3 Liver CT (default)
-    python src/main.py --task d4_hackathon --group-num 8
+    python src/main.py
+    python src/main.py --config config_d4_hackathon.yaml
 """
 import argparse
 import logging
@@ -13,113 +17,91 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import yaml
 import numpy as np
 from monai.utils.misc import set_determinism
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_ARGS = {
+    "environ": {
+        "config_file": "config.yaml",
+        "seed": 888,
+        "data_name": "liver_data",
+        "data_source": {},
+    },
+    "data": {
+        "train_percentage": 0.8,
+        "val_percentage": 0.1,
+        "test_percentage": 0.1,
+        "spatial_size": [250, 250],
+        "repeats": 3,
+        "rotate_range": [
+            [np.pi / 18, np.pi / 9],
+            [np.pi / 18, np.pi / 9],
+        ],
+        "shear_range": [[0, 0], [0, 0]],
+        "translate_range": [[-60, 60], [0, 0]],
+        "scale_range": [[0, 0], [0, 0]],
+        "affine_prob": 0,
+        "spatial_axis": [0, 1],
+        "flip_prob": 0.5,
+        "a_min": -125,
+        "a_max": 200,
+        "cache_rate": 1,
+    },
+    "img_cnt": 5,
+    "training": {
+        "num_epoch": 3,
+        "batch_size": 128,
+        "lr": 1e-3,
+        "timm_model": "resnet18",
+        "num_classes": 1,
+    },
+    "threshold": 0.5,
+}
 
-def get_default_args(task="d3_liver_ct", group_num=1):
-    """Return default args dict for the given task."""
-    if task == "d4_hackathon":
-        from src.env_setup import D4_DISEASE_LIST
-        data_name = D4_DISEASE_LIST[(group_num - 1) % len(D4_DISEASE_LIST)]
-        return {
-            "task": "d4_hackathon",
-            "environ": {
-                "config_file": "config.yaml",
-                "seed": 42,
-                "data_name": data_name,
-                "group_num": group_num,
-            },
-            "data": {
-                "train_percentage": 0.7,
-                "val_percentage": 0.15,
-                "test_percentage": 0.15,
-                "spatial_size": [224, 224],
-                "repeats": 2,
-                "rotate_range": [[np.pi / 18, np.pi / 9]],
-                "shear_range": [[0, 0], [0, 0]],
-                "translate_range": [[30, 60], [30, 60]],
-                "scale_range": [[0.0001, 0.0001], [0.0001, 0.0001]],
-                "affine_prob": 0.5,
-                "spatial_axis": [0, 1],
-                "flip_prob": 0.5,
-                "a_min": -125,
-                "a_max": 200,
-                "cache_rate": 1,
-            },
-            "img_cnt": 5,
-            "training": {
-                "num_epoch": 10,
-                "batch_size": 16,
-                "lr": 1e-3,
-                "timm_model": "resnet18",
-                "num_classes": 1,
-            },
-            "threshold": 0.5,
-        }
-    else:
-        # d3_liver_ct
-        return {
-            "task": "d3_liver_ct",
-            "environ": {
-                "config_file": "config.yaml",
-                "seed": 888,
-                "data_name": "liver_data",
-            },
-            "data": {
-                "train_percentage": 0.8,
-                "val_percentage": 0.1,
-                "test_percentage": 0.1,
-                "spatial_size": [250, 250],
-                "repeats": 3,
-                "rotate_range": [
-                    [np.pi / 18, np.pi / 9],
-                    [np.pi / 18, np.pi / 9],
-                ],
-                "shear_range": [[0, 0], [0, 0]],
-                "translate_range": [[-60, 60], [0, 0]],
-                "scale_range": [[0, 0], [0, 0]],
-                "affine_prob": 0,
-                "spatial_axis": [0, 1],
-                "flip_prob": 0.5,
-                "a_min": -125,
-                "a_max": 200,
-                "cache_rate": 1,
-            },
-            "img_cnt": 5,
-            "training": {
-                "num_epoch": 3,
-                "batch_size": 128,
-                "lr": 1e-3,
-                "timm_model": "resnet18",
-                "num_classes": 1,
-            },
-            "threshold": 0.5,
-        }
+
+def load_config(config_path=None, overrides=None):
+    """Load config from YAML, merge with defaults, apply CLI overrides."""
+    import copy
+    args = copy.deepcopy(DEFAULT_ARGS)
+
+    if config_path and os.path.exists(config_path):
+        with open(config_path, "r") as fp:
+            file_config = yaml.safe_load(fp) or {}
+        args = _deep_merge(args, file_config)
+        logger.info(f"Loaded config from {config_path}")
+
+    if overrides:
+        args = _deep_merge(args, overrides)
+
+    return args
+
+
+def _deep_merge(base, override):
+    """Recursively merge override dict into base dict."""
+    import copy
+    result = copy.deepcopy(base)
+    for key, value in override.items():
+        if (
+            key in result
+            and isinstance(result[key], dict)
+            and isinstance(value, dict)
+        ):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
 
 
 def main():
-    parser = argparse.ArgumentParser(description="D3/D4 CNN Classification Pipeline")
-    parser.add_argument(
-        "--task",
-        type=str,
-        default="d3_liver_ct",
-        choices=["d3_liver_ct", "d4_hackathon"],
-        help="Task type: d3_liver_ct or d4_hackathon",
-    )
-    parser.add_argument(
-        "--group-num",
-        type=int,
-        default=1,
-        help="Group number for D4 Hackathon (1-15, determines disease)",
-    )
+    parser = argparse.ArgumentParser(description="CNN Classification Pipeline")
     parser.add_argument(
         "--config",
         type=str,
         default=None,
-        help="Path to config YAML file (overrides --task defaults)",
+        help="Path to config YAML file",
     )
     args_cli = parser.parse_args()
 
@@ -130,41 +112,54 @@ def main():
         force=True,
     )
 
-    # Build args
-    args = get_default_args(args_cli.task, args_cli.group_num)
-
-    # Load config file if specified
-    if args_cli.config:
-        import yaml
-
-        with open(args_cli.config, "r") as fp:
-            file_args = yaml.safe_load(fp)
-            args.update(file_args)
-
-    logger.info(f"Task: {args['task']}")
+    args = load_config(args_cli.config)
     logger.info(f"Data: {args['environ']['data_name']}")
     set_determinism(args["environ"]["seed"])
 
     # Setup data
-    from src.env_setup import setup_data, get_data_count
+    from src.env_setup import setup_data, get_data_count, find_data_dir
 
     setup_data(args)
     get_data_count(args)
 
-    # Load and split data
-    from src.data import load_data_list, populate_data_lists, generate_dataset
+    # Find data directory and load data list
+    data_dir = find_data_dir(args)
+    logger.info(f"Using data directory: {data_dir}")
 
-    data_dicts = load_data_list(args)
+    # Load data list
+    with open(os.path.join(data_dir, "data_list.yaml"), "r") as fp:
+        data_dicts = yaml.safe_load(fp)["data"]
+    logger.info(f"Total data: {len(data_dicts)}")
+
+    # Load dataset_info.yaml (modality, etc.)
+    from src.transforms import load_dataset_info
+
+    dataset_info = load_dataset_info(data_dir)
+    modality = dataset_info.get("modality", "unknown")
+    logger.info(f"Modality: {modality}")
+
+    # Derive properties from data
+    from src.transforms import derive_has_masks, derive_reader
+
+    has_masks = derive_has_masks(data_dicts)
+    reader_kw = derive_reader(data_dicts)
+    logger.info(f"Has masks: {has_masks}")
+    logger.info(f"Reader: {reader_kw or 'monai default'}")
+
+    # Split data
+    from src.data import populate_data_lists
+
     train_dicts, val_dicts, test_dicts = populate_data_lists(args, data_dicts)
-    logger.info(f"{len(train_dicts)} data for training")
-    logger.info(f"{len(val_dicts)} data for validation")
-    logger.info(f"{len(test_dicts)} data for testing")
+    logger.info(f"{len(train_dicts)} training, {len(val_dicts)} validation, {len(test_dicts)} testing")
 
-    # Build transforms and datasets
+    # Build transforms (pass data_dicts sample for derivation)
     from src.transforms import build_train_transform, build_val_transform
 
-    train_transform = build_train_transform(args)
-    val_transform = build_val_transform(args)
+    train_transform = build_train_transform(args, data_dicts, dataset_info)
+    val_transform = build_val_transform(args, data_dicts, dataset_info)
+
+    # Build datasets
+    from src.data import generate_dataset
 
     train_set = generate_dataset(args, train_dicts, train_transform)
     val_set = generate_dataset(args, val_dicts, val_transform)
@@ -185,12 +180,10 @@ def main():
     import torch
 
     from src.evaluate import infer, plot_roc_and_show_result
-    from src.model import get_device
 
-    save_dir = "/content"
-    best_weights = os.path.join(save_dir, "best_weights.pth")
-    if not os.path.exists(best_weights):
-        best_weights = "best_weights.pth"
+    best_weights = "best_weights.pth"
+    if os.path.exists("/content/best_weights.pth"):
+        best_weights = "/content/best_weights.pth"
 
     best_state = torch.load(best_weights, weights_only=True)
     model.load_state_dict(best_state)

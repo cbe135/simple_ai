@@ -1,50 +1,98 @@
-import numpy as np
+"""
+Data-driven transforms. No hardcoded task names.
+
+Transform pipelines are built from:
+  - dataset_info.yaml (modality)
+  - data_list.yaml structure (has_masks, reader)
+  - args (hyperparameters like spatial_size, a_min/a_max, repeats)
+"""
+import os
 from monai.transforms import (
     Compose,
     EnsureTyped,
     LoadImaged,
     MaskIntensityd,
-    Orientationd,
     RandAffined,
     RandFlipd,
     RandGaussianNoiseD,
     RepeatChanneld,
     Resized,
-    ScaleIntensityd,
     ScaleIntensityRanged,
 )
 
 
-def get_loaders(args):
-    """Return loader transforms based on task type."""
-    task = args.get("task", "d3_liver_ct")
+def load_dataset_info(data_dir):
+    """Load dataset_info.yaml from the data directory.
 
-    if task == "d4_hackathon":
-        return [
-            LoadImaged(keys=["image"], reader="pilreader", ensure_channel_first=True),
-            EnsureTyped(keys=["image", "label"]),
-        ]
-    else:
-        # d3_liver_ct: has masks
-        return [
-            LoadImaged(keys=["image", "mask"], ensure_channel_first=True),
-            EnsureTyped(keys=["image", "label"]),
-        ]
+    Returns a dict with at least:
+        modality: CT | X-ray | MRI | ...
+    """
+    import yaml
+
+    info_path = os.path.join(data_dir, "dataset_info.yaml")
+    if os.path.exists(info_path):
+        with open(info_path, "r") as fp:
+            return yaml.safe_load(fp)
+    return {}
 
 
-def get_preprocess(args):
-    """Return the preprocessing transform pipeline based on task."""
-    task = args.get("task", "d3_liver_ct")
+def derive_reader(data_dicts_sample):
+    """Derive the MONAI reader from file extensions in the data list.
 
-    if task == "d4_hackathon":
-        return [
-            Resized(keys=["image"], spatial_size=args["data"]["spatial_size"]),
-            RepeatChanneld(keys=["image"], repeats=args["data"]["repeats"]),
-        ]
-    else:
-        # d3_liver_ct: resize + CT windowing + mask + repeat
-        return [
-            Resized(keys=["image", "mask"], spatial_size=args["data"]["spatial_size"]),
+    Returns a reader kwarg dict (e.g. {'reader': 'pilreader'} or {}).
+    """
+    if not data_dicts_sample:
+        return {}
+
+    sample = data_dicts_sample[0]
+    img_path = str(sample.get("image", ""))
+
+    if img_path.endswith(".nii.gz") or img_path.endswith(".nii"):
+        return {}  # MONAI default NIfTI reader
+    elif img_path.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif")):
+        return {"reader": "pilreader"}
+    elif img_path.lower().endswith(".dcm") or ".dcm" in img_path:
+        return {"reader": "dcmreader"}
+
+    return {}
+
+
+def derive_has_masks(data_dicts_sample):
+    """Check if the data list contains mask entries."""
+    if not data_dicts_sample:
+        return False
+    return "mask" in data_dicts_sample[0]
+
+
+def get_loaders(data_dicts_sample):
+    """Build loader transforms by deriving keys and reader from the data."""
+    has_masks = derive_has_masks(data_dicts_sample)
+    reader_kw = derive_reader(data_dicts_sample)
+
+    keys = ["image"]
+    if has_masks:
+        keys.append("mask")
+
+    return [
+        LoadImaged(keys=keys, ensure_channel_first=True, **reader_kw),
+        EnsureTyped(keys=["image", "label"]),
+    ]
+
+
+def get_preprocess(args, data_dicts_sample, dataset_info):
+    """Build preprocessing pipeline based on modality and data characteristics."""
+    modality = dataset_info.get("modality", "")
+    has_masks = derive_has_masks(data_dicts_sample)
+
+    steps = []
+
+    if modality == "CT":
+        # CT: resize → window → mask → repeat
+        keys = ["image"]
+        if has_masks:
+            keys.append("mask")
+        steps.append(Resized(keys=keys, spatial_size=args["data"]["spatial_size"]))
+        steps.append(
             ScaleIntensityRanged(
                 keys=["image"],
                 a_min=args["data"]["a_min"],
@@ -52,15 +100,25 @@ def get_preprocess(args):
                 b_min=0,
                 b_max=1,
                 clip=True,
-            ),
-            MaskIntensityd(keys="image", mask_key="mask"),
-            RepeatChanneld(keys=["image"], repeats=args["data"]["repeats"]),
-        ]
+            )
+        )
+        if has_masks:
+            steps.append(MaskIntensityd(keys="image", mask_key="mask"))
+    else:
+        # Non-CT (X-ray, MRI, etc.): resize only
+        steps.append(
+            Resized(keys=["image"], spatial_size=args["data"]["spatial_size"])
+        )
+
+    steps.append(
+        RepeatChanneld(keys=["image"], repeats=args["data"]["repeats"])
+    )
+
+    return steps
 
 
-def get_augmentation(args):
-    """Return the data augmentation transform pipeline based on task."""
-    task = args.get("task", "d3_liver_ct")
+def get_augmentation(args, dataset_info):
+    """Build augmentation pipeline. Modality-agnostic, driven by args."""
     aug = [
         RandAffined(
             keys="image",
@@ -73,17 +131,33 @@ def get_augmentation(args):
         ),
     ]
 
-    if task == "d4_hackathon":
-        aug.append(RandGaussianNoiseD(keys="image"))
+    # Flip is always applied (controlled by flip_prob)
+    aug.append(
+        RandFlipd(
+            keys="image",
+            spatial_axis=args["data"]["spatial_axis"],
+            prob=args["data"]["flip_prob"],
+        )
+    )
+
+    # Gaussian noise is always applied (controlled by prob in augmentation config)
+    aug.append(RandGaussianNoiseD(keys="image"))
 
     return aug
 
 
-def build_train_transform(args):
-    """Build the full training transform (loaders + preprocess + augmentation)."""
-    return Compose(get_loaders(args) + get_preprocess(args) + get_augmentation(args))
+def build_train_transform(args, data_dicts_sample, dataset_info):
+    """Build full training transform."""
+    return Compose(
+        get_loaders(data_dicts_sample)
+        + get_preprocess(args, data_dicts_sample, dataset_info)
+        + get_augmentation(args, dataset_info)
+    )
 
 
-def build_val_transform(args):
-    """Build the validation/test transform (loaders + preprocess only)."""
-    return Compose(get_loaders(args) + get_preprocess(args))
+def build_val_transform(args, data_dicts_sample, dataset_info):
+    """Build validation/test transform (no augmentation)."""
+    return Compose(
+        get_loaders(data_dicts_sample)
+        + get_preprocess(args, data_dicts_sample, dataset_info)
+    )

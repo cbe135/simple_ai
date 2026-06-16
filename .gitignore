@@ -12,5 +12,7 @@ venv/
 *.yaml
 !config.yaml
 !config_d4_hackathon.yaml
+!dataset_info_d3_liver_ct.yaml
+!dataset_info_d4_hackathon.yaml
 .ipynb_checkpoints/
 *.log

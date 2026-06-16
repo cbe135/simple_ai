@@ -1,3 +1,12 @@
+"""
+Environment detection and data setup.
+
+Data source configuration lives in args["environ"]["data_source"]:
+    file_ids:        list of Google Drive file IDs
+    archive_format:  "zip" or "tar.gz"
+
+No hardcoded task names. All source info comes from the config.
+"""
 import os
 import shutil
 import tarfile
@@ -6,6 +15,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+# ──────────────────────────────────────────────────────
+# Environment detection
+# ──────────────────────────────────────────────────────
 
 def detect_environment():
     """Detect the runtime environment: Colab, Kaggle, or Local."""
@@ -27,182 +40,167 @@ def mount_drive():
     drive.mount("drive", force_remount=True)
 
 
+# ──────────────────────────────────────────────────────
+# Data setup
+# ──────────────────────────────────────────────────────
+
 def setup_data(args, data_dir="/content"):
-    """Set up data directory based on environment and task."""
-    task = args.get("task", "d3_liver_ct")
-
-    if task == "d4_hackathon":
-        return _setup_data_d4(args, data_dir)
-    else:
-        return _setup_data_d3(args, data_dir)
-
-
-# ──────────────────────────────────────────────────────
-# D3: Liver CT — ZIP from Google Drive
-# ──────────────────────────────────────────────────────
-
-def _setup_data_d3(args, data_dir):
-    """D3: Copy ZIP from Drive / download, then unzip."""
+    """Set up data directory based on environment and config."""
     env = detect_environment()
     data_name = args["environ"]["data_name"]
-    data_zip = f"{data_name}.zip"
+    source = args["environ"].get("data_source", {})
+    archive_fmt = source.get("archive_format", "zip")
+    file_ids = source.get("file_ids", [])
+    group_num = source.get("group_num", None)
+
     target_dir = os.path.join(data_dir, data_name)
+    archive_name = f"{data_name}.{archive_fmt}"
 
     if env == "colab":
-        _d3_colab(args, data_dir, data_zip, target_dir)
+        _setup_colab(data_dir, archive_name, target_dir, file_ids)
     elif env == "kaggle":
-        _d3_kaggle(args, data_dir, data_zip, target_dir)
+        _setup_kaggle(data_dir, archive_name, target_dir, data_name)
     else:
-        _d3_local(args, data_dir, data_zip, target_dir)
+        _setup_local(data_dir, archive_name, target_dir, file_ids, archive_fmt)
 
     return target_dir
 
 
-def _d3_colab(args, data_dir, data_zip, target_dir):
-    drive_path = f"/content/drive/MyDrive/{data_zip}"
-    local_zip = os.path.join(data_dir, data_zip)
+def _setup_colab(data_dir, archive_name, target_dir, file_ids):
+    """Copy archive from Google Drive, then extract."""
+    drive_path = f"/content/drive/MyDrive/{archive_name}"
+    local_archive = os.path.join(data_dir, archive_name)
 
     if os.path.exists(drive_path):
-        shutil.copyfile(drive_path, local_zip)
+        shutil.copyfile(drive_path, local_archive)
 
-    if os.path.exists(local_zip) and not os.path.exists(target_dir):
-        logger.info("Unzipping...")
-        with zipfile.ZipFile(local_zip, "r") as zip_ref:
-            zip_ref.extractall(data_dir)
+    if not os.path.exists(local_archive) and file_ids:
+        _download_via_gdown(data_dir, archive_name, file_ids)
+
+    _extract_if_needed(data_dir, archive_name, target_dir)
 
     if os.path.exists(target_dir):
-        logger.info("D3 data ready")
+        logger.info("Data ready (Colab)")
     else:
-        logger.error("D3 data directory not found")
+        logger.error("Data directory not found")
 
 
-def _d3_kaggle(args, data_dir, data_zip, target_dir):
+def _setup_kaggle(data_dir, archive_name, target_dir, data_name):
+    """Check for data in Kaggle input directory."""
     kaggle_input = "/kaggle/input"
-    data_name = args["environ"]["data_name"]
-    local_zip = os.path.join(data_dir, data_zip)
+    local_archive = os.path.join(data_dir, archive_name)
 
     if os.path.exists(os.path.join(kaggle_input, data_name)):
         shutil.copytree(os.path.join(kaggle_input, data_name), target_dir)
-    elif os.path.exists(local_zip) and not os.path.exists(target_dir):
-        with zipfile.ZipFile(local_zip, "r") as zip_ref:
-            zip_ref.extractall(data_dir)
+    elif os.path.exists(local_archive) and not os.path.exists(target_dir):
+        _extract(data_dir, archive_name, target_dir)
 
     if os.path.exists(target_dir):
-        logger.info("D3 data ready (Kaggle)")
+        logger.info("Data ready (Kaggle)")
     else:
-        logger.error("D3 data not found in Kaggle input directory")
+        logger.error("Data not found in Kaggle input directory")
 
 
-def _d3_local(args, data_dir, data_zip, target_dir):
-    local_zip = os.path.join(data_dir, data_zip)
+def _setup_local(data_dir, archive_name, target_dir, file_ids, archive_fmt):
+    """Download via gdown if needed, then extract."""
+    local_archive = os.path.join(data_dir, archive_name)
 
     if not os.path.exists(target_dir):
-        if os.path.exists(local_zip):
-            logger.info("Unzipping existing D3 data...")
-            with zipfile.ZipFile(local_zip, "r") as zip_ref:
-                zip_ref.extractall(data_dir)
+        if os.path.exists(local_archive):
+            logger.info("Extracting existing data...")
+            _extract(data_dir, archive_name, target_dir)
+        elif file_ids:
+            _download_via_gdown(data_dir, archive_name, file_ids)
+            _extract(data_dir, archive_name, target_dir)
         else:
-            logger.info("Downloading D3 data via gdown...")
-            import gdown
-
-            google_drive_ids = [
-                "1LNkFfchl4YwKzLJ5SVDovhyvmw6vUUMf",
-                "1vki3HykS0akuKoyLQ11yTtmucr-T4leZ",
-                "1ueP6RT9NAxMO2khrqFDvIGHyCYglH0eE",
-            ]
-            for fid in google_drive_ids:
-                url = f"https://drive.google.com/uc?id={fid}"
-                out = os.path.join(data_dir, f"{fid}.zip")
-                gdown.download(url, out, quiet=False)
-
-            for fid in google_drive_ids:
-                fpath = os.path.join(data_dir, f"{fid}.zip")
-                if os.path.exists(fpath):
-                    with zipfile.ZipFile(fpath, "r") as zip_ref:
-                        zip_ref.extractall(data_dir)
-
-            logger.info("D3 data downloaded via gdown")
+            logger.warning(
+                f"No data source configured and no archive found at {local_archive}. "
+                f"Place your data in {target_dir} or add file_ids to config."
+            )
 
     if os.path.exists(target_dir):
-        logger.info("D3 data ready")
+        logger.info("Data ready (Local)")
     else:
-        logger.error(f"D3 data directory {target_dir} not found")
+        logger.error(f"Data directory {target_dir} not found")
 
 
-# ──────────────────────────────────────────────────────
-# D4: Hackathon — tar.gz via gdown by group number
-# ──────────────────────────────────────────────────────
+def _download_via_gdown(data_dir, archive_name, file_ids):
+    """Download files from Google Drive via gdown."""
+    logger.info("Downloading data via gdown...")
+    import gdown
 
-D4_DISEASE_LIST = [
-    "Atelectasis",
-    "Cardiomegaly",
-    "Colon_Polyp",
-    "Diabetic_Retinopathy",
-    "Melanoma",
-]
+    for fid in file_ids:
+        url = f"https://drive.google.com/uc?id={fid}"
+        out = os.path.join(data_dir, f"{fid}.zip")
+        if not os.path.exists(out):
+            gdown.download(url, out, quiet=False)
 
-D4_FILE_IDS = [
-    "1w48H3hLAXT7oxQfy1QvMpkVvzVASOFNQ",
-    "1kvE5-nqM4Cp7UjmQaSZwhIBtIlhu_bCj",
-    "15R1shEqnTF6QJbTy4QJFG6cW0LXTAjVk",
-    "1hdH86SIDh0eO64-ArToRhdLxJ6ICXbuc",
-    "1X3Fwtk4Q2rUXWbkyJvuTTo5zhxYgsdM0",
-    "1GUKdWnZx8KR-XCy8dWIPn_q4h8vVqFYN",
-    "1-EBbLErb3f8CD7lznZ4LZVqcBKn5kb6G",
-    "17VhHyTOfxadT3EuoqOWfTDMXjM7ix3ZU",
-    "1wOZHBzJtbN15qBy2bFrw4CPkmgYspsni",
-    "105qkBolkdQdJxkl3jhUJF48ITvBFCpAP",
-]
+    # Merge multiple downloads into one archive if needed
+    # (for now, treat each file as a separate archive and extract them all)
+    for fid in file_ids:
+        fpath = os.path.join(data_dir, f"{fid}.zip")
+        if os.path.exists(fpath):
+            _extract(data_dir, f"{fid}.zip", os.path.join(data_dir, fid))
+
+    logger.info("Download complete")
 
 
-def _setup_data_d4(args, data_dir):
-    """D4: Download tar.gz via gdown, then extract."""
-    env = detect_environment()
-    data_name = args["environ"]["data_name"]
-    group_num = args["environ"].get("group_num", 1)
-    target_dir = os.path.join(data_dir, data_name)
-    tar_file = os.path.join(data_dir, f"{data_name}.tar.gz")
+def _extract(data_dir, archive_name, target_dir):
+    """Extract archive if target_dir doesn't exist."""
+    archive_path = os.path.join(data_dir, archive_name)
+    if not os.path.exists(archive_path):
+        return
 
+    if archive_name.endswith(".zip"):
+        with zipfile.ZipFile(archive_path, "r") as zf:
+            zf.extractall(data_dir)
+    elif archive_name.endswith(".tar.gz") or archive_name.endswith(".tgz"):
+        with tarfile.open(archive_path, "r") as tf:
+            tf.extractall(path=data_dir)
+    else:
+        logger.warning(f"Unknown archive format: {archive_name}")
+
+
+def _extract_if_needed(data_dir, archive_name, target_dir):
+    """Extract archive only if target_dir doesn't exist yet."""
     if not os.path.exists(target_dir):
-        if not os.path.exists(tar_file):
-            file_id = D4_FILE_IDS[(group_num - 1) % len(D4_FILE_IDS)]
-            logger.info(f"Downloading D4 data (group {group_num}, id={file_id})...")
-            import gdown
-            gdown.download(id=file_id, output=tar_file)
-        else:
-            logger.info("D4 tar.gz already downloaded")
-
-        if os.path.exists(tar_file) and not os.path.exists(target_dir):
-            logger.info("Extracting D4 tar.gz...")
-            with tarfile.open(tar_file, "r") as tar:
-                tar.extractall(path=data_dir)
-
-    if os.path.exists(target_dir):
-        logger.info("D4 data ready")
-    else:
-        logger.error(f"D4 data directory {target_dir} not found")
-
-    return target_dir
+        _extract(data_dir, archive_name, target_dir)
 
 
 def get_data_count(args):
-    """Log the number of images (and masks if applicable)."""
-    task = args.get("task", "d3_liver_ct")
+    """Log the number of images (and masks if present)."""
     data_name = args["environ"]["data_name"]
     data_dir = os.path.join("/content", data_name)
     if not os.path.exists(data_dir):
         data_dir = os.path.join(os.getcwd(), data_name)
 
-    if task == "d4_hackathon":
-        images_dir = os.path.join(data_dir, "images")
-        if os.path.exists(images_dir):
-            logger.info(f"Number of images: {len(os.listdir(images_dir))}")
-        else:
-            logger.info(f"Data directory: {data_dir}")
-    else:
-        images_dir = os.path.join(data_dir, "images")
-        masks_dir = os.path.join(data_dir, "masks")
-        if os.path.exists(images_dir):
-            logger.info(f"Number of images: {len(os.listdir(images_dir))}")
-        if os.path.exists(masks_dir):
-            logger.info(f"Number of masks: {len(os.listdir(masks_dir))}")
+    images_dir = os.path.join(data_dir, "images")
+    masks_dir = os.path.join(data_dir, "masks")
+
+    if os.path.exists(images_dir):
+        logger.info(f"Number of images: {len(os.listdir(images_dir))}")
+    if os.path.exists(masks_dir):
+        logger.info(f"Number of masks: {len(os.listdir(masks_dir))}")
+
+
+def find_data_dir(args):
+    """Locate the actual data directory (might be nested)."""
+    data_name = args["environ"]["data_name"]
+    candidates = [
+        os.path.join("/content", data_name),
+        os.path.join(os.getcwd(), data_name),
+    ]
+
+    for d in candidates:
+        if os.path.exists(d):
+            # Check if data_list.yaml exists directly or one level deeper
+            if os.path.exists(os.path.join(d, "data_list.yaml")):
+                return d
+            for sub in os.listdir(d):
+                sub_path = os.path.join(d, sub)
+                if os.path.isdir(sub_path) and os.path.exists(
+                    os.path.join(sub_path, "data_list.yaml")
+                ):
+                    return sub_path
+
+    return candidates[0]  # fallback
