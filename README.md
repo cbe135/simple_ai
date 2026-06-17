@@ -142,11 +142,140 @@ Or place your data manually in the working directory.
 
 ## Adding a New Dataset
 
-1. Prepare `data_list.yaml` + `dataset_info.yaml` + image files
-2. Create a config YAML with your data source and hyperparameters
-3. Run: `python src/main.py --config your_config.yaml`
+No code changes needed. Follow these steps:
 
-No code changes needed.
+### Step 1: Prepare your data directory
+
+```
+your_data/
+├── data_list.yaml        # required
+├── dataset_info.yaml     # required
+├── images/               # required
+│   ├── img_001.nii.gz    # (or .jpg, .png, .dcm, ...)
+│   ├── img_002.nii.gz
+│   └── ...
+└── masks/                # optional (omit if no segmentation masks)
+    ├── mask_001.nii.gz
+    └── ...
+```
+
+### Step 2: Create `data_list.yaml`
+
+List every sample with its image path, optional mask, and label.
+
+**With masks (e.g. CT segmentation):**
+
+```yaml
+data:
+  - image: "path/to/img_001.nii.gz"
+    mask: "path/to/mask_001.nii.gz"
+    label: 0
+  - image: "path/to/img_002.nii.gz"
+    mask: "path/to/mask_002.nii.gz"
+    label: 1
+```
+
+**Without masks (e.g. X-ray classification):**
+
+```yaml
+data:
+  - image: "path/to/img_001.jpg"
+    label: 0
+  - image: "path/to/img_002.jpg"
+    label: 1
+```
+
+Paths can be absolute or relative to the data directory.
+
+### Step 3: Create `dataset_info.yaml`
+
+One line — the modality of your data:
+
+```yaml
+modality: CT
+```
+
+Supported modalities and their automatic preprocessing:
+
+| Modality | Preprocessing applied |
+|---|---|
+| `CT` | Resize → CT windowing (`a_min`/`a_max`) → MaskIntensity (if masks exist) → RepeatChannel |
+| `X-ray` | Resize → RepeatChannel |
+| `MRI` | Resize → RepeatChannel |
+
+Other values (e.g. `Ultrasound`, `Pathology`) also work — they get the non-CT default pipeline (resize + repeat).
+
+### Step 4: Create a config YAML
+
+Copy an existing config and customize. Example `config_my_data.yaml`:
+
+```yaml
+environ:
+  data_name: your_data          # must match your data directory name
+  seed: 42
+  data_source:
+    file_ids:
+      - "your_google_drive_file_id_here"
+    archive_format: zip          # zip or tar.gz
+
+data:
+  spatial_size: [224, 224]       # resize target (match your model's expected input)
+  repeats: 3                     # number of channels to repeat to
+  a_min: -125                    # CT window min (only used if modality: CT)
+  a_max: 200                     # CT window max (only used if modality: CT)
+  affine_prob: 0.5               # probability of random affine augmentation
+  flip_prob: 0.5                 # probability of random flip
+  cache_rate: 1                  # dataset caching rate
+  train_percentage: 0.7
+  val_percentage: 0.15
+  test_percentage: 0.15
+
+training:
+  num_epoch: 10
+  batch_size: 16
+  lr: 0.001
+  timm_model: resnet18           # any timm model (e.g. efficientnet_b0)
+  num_classes: 1                 # binary classification
+
+threshold: 0.5
+```
+
+If you don't have Google Drive file IDs, place the data manually in your working directory under `your_data/`.
+
+### Step 5: Run
+
+```bash
+python src/main.py --config config_my_data.yaml
+```
+
+Or in the notebook:
+
+```python
+args = load_config("config_my_data.yaml")
+```
+
+### Step 6: Verify
+
+The pipeline will print what it derived:
+
+```
+INFO - Data: your_data
+INFO - Modality: CT
+INFO - Has masks: True
+INFO - Reader: monai default
+INFO - Number of images: 500
+INFO - Number of masks: 500
+INFO - 350 training, 75 validation, 75 testing
+```
+
+### Quick reference: what gets auto-derived
+
+| Property | Source | Example |
+|---|---|---|
+| **Reader** | File extension of first image in `data_list.yaml` | `.nii.gz` → MONAI NIfTI; `.jpg` → PIL |
+| **Has masks** | Whether `data_list.yaml` entries have a `"mask"` key | `"mask" in data_dicts[0]` |
+| **Preprocessing** | `dataset_info.yaml` → `modality` field | `CT` → windowing + mask; `X-ray` → resize |
+| **Data source** | Config YAML → `data_source.file_ids` + `archive_format` | Google Drive download via gdown |
 
 ## Supported Environments
 
