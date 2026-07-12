@@ -1,4 +1,5 @@
 import os
+import json
 import yaml
 import logging
 
@@ -8,16 +9,33 @@ logger = logging.getLogger(__name__)
 
 
 def load_data_list(args, data_dir=None):
-    """Load the data list YAML and return the list of data dicts."""
+    """Load the data list and return the list of data dicts.
+
+    Supports data_list.yaml (preferred) with a data_list.json fallback.
+    Both are expected to expose a top-level "data" key.
+    """
     data_name = args["environ"]["data_name"]
     if data_dir is None:
-        data_dir = os.path.join("/content", data_name)
+        from src.env_setup import default_data_dir
+
+        data_dir = os.path.join(default_data_dir(), data_name)
         if not os.path.exists(data_dir):
             data_dir = os.path.join(os.getcwd(), data_name)
 
-    with open(os.path.join(data_dir, "data_list.yaml"), "r") as fp:
-        data = yaml.safe_load(fp)
-    return data["data"]
+    yaml_path = os.path.join(data_dir, "data_list.yaml")
+    json_path = os.path.join(data_dir, "data_list.json")
+
+    if os.path.exists(yaml_path):
+        with open(yaml_path, "r") as fp:
+            return yaml.safe_load(fp)["data"]
+
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as fp:
+            return json.load(fp)["data"]
+
+    raise FileNotFoundError(
+        f"No data list found in {data_dir} (expected data_list.yaml or data_list.json)"
+    )
 
 
 def populate_data_lists(args, data_dicts):

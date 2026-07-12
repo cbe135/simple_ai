@@ -1,9 +1,0 @@
-# Example dataset_info.yaml — D3 Liver CT
-#
-# Place this file as dataset_info.yaml inside your data directory
-# alongside data_list.yaml and images/ and masks/
-#
-# This file tells the pipeline to apply CT-specific preprocessing
-# (windowing, mask intensity, etc.)
-
-modality: CT

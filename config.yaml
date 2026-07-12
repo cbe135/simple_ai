@@ -1,5 +1,5 @@
-# D3 Liver CT — default config
-# Run: python src/main.py
+# Default config (example: liver CT)
+# Run: python src/main.py --config config.yaml
 
 environ:
   config_file: config.yaml
@@ -41,3 +41,21 @@ training:
   num_classes: 1
 
 threshold: 0.5
+
+# Extra transforms (MONAI bundle format) appended to the auto-derived presets.
+# Each entry is a `_target_` dict; `@data.*` references the `data` section above.
+# Leave empty (default) to use only the auto-derived preset transforms.
+#
+# loaders_extra     -> appended after LoadImaged / EnsureTyped
+# preprocess_extra  -> appended after Resize / window / MaskIntensity / RepeatChannel
+# augmentation_extra-> appended after RandAffine / RandFlip / GaussianNoise (train only)
+#
+# Example:
+#   preprocess_extra:
+#     - _target_: monai.transforms.RandGaussianSmoothd
+#       keys: ["image"]
+#       sigma_x: [0.5, 1.0]
+transforms:
+  loaders_extra: []
+  preprocess_extra: []
+  augmentation_extra: []

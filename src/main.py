@@ -8,12 +8,13 @@ Entry point for end-to-end training. All behavior is driven by:
 
 Usage:
     python src/main.py
-    python src/main.py --config config_d4_hackathon.yaml
+    python src/main.py --config config.yaml
 """
 import argparse
 import logging
 import os
 import sys
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -103,6 +104,27 @@ def main():
         default=None,
         help="Path to config YAML file",
     )
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        default=None,
+        help=(
+            "Base directory where the dataset directory "
+            "(args['environ']['data_name']) lives. "
+            "Defaults to /content on Colab/Kaggle, else the current "
+            "working directory."
+        ),
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help=(
+            "Parent directory for run outputs. A timestamped subdirectory "
+            "is created here holding weights, loss curve, and config. "
+            "Defaults to the current working directory."
+        ),
+    )
     args_cli = parser.parse_args()
 
     logging.basicConfig(
@@ -116,14 +138,34 @@ def main():
     logger.info(f"Data: {args['environ']['data_name']}")
     set_determinism(args["environ"]["seed"])
 
-    # Setup data
-    from src.env_setup import setup_data, get_data_count, find_data_dir
+    # Resolve data base directory
+    from src.env_setup import (
+        setup_data,
+        get_data_count,
+        find_data_dir,
+        default_data_dir,
+    )
 
-    setup_data(args)
-    get_data_count(args)
+    data_dir = args_cli.data_dir or default_data_dir()
+    logger.info(f"Using data base directory: {data_dir}")
+
+    # Run output directory: <output_dir>/<YYYYMMDD_HHMMSS>/
+    output_base = args_cli.output_dir or os.getcwd()
+    run_dir = os.path.join(output_base, datetime.now().strftime("%Y%m%d_%H%M%S"))
+    os.makedirs(run_dir, exist_ok=True)
+    logger.info(f"Run output directory: {run_dir}")
+
+    # Save the resolved config for this run
+    from src.config import save_config
+
+    save_config(args, run_dir)
+
+    # Setup data
+    setup_data(args, data_dir)
+    get_data_count(args, data_dir)
 
     # Find data directory and load data list
-    data_dir = find_data_dir(args)
+    data_dir = find_data_dir(args, data_dir)
     logger.info(f"Using data directory: {data_dir}")
 
     # Load data list
@@ -169,21 +211,23 @@ def main():
     logger.info("Starting training...")
     from src.train import train_pipeline
 
-    model, train_loader, val_loader, record = train_pipeline(args, train_set, val_set)
+    model, train_loader, val_loader, record = train_pipeline(
+        args, train_set, val_set, run_dir
+    )
 
     # Plot loss curves
     from src.utils import plot_loss_curves
 
-    plot_loss_curves(args, record)
+    plot_loss_curves(args, record, save_path=os.path.join(run_dir, "loss_curve.png"))
 
     # Evaluate
     import torch
 
     from src.evaluate import infer, plot_roc_and_show_result
 
-    best_weights = "best_weights.pth"
-    if os.path.exists("/content/best_weights.pth"):
-        best_weights = "/content/best_weights.pth"
+    best_weights = os.path.join(run_dir, "best_weights.pth")
+    if not os.path.exists(best_weights):
+        best_weights = "best_weights.pth"
 
     best_state = torch.load(best_weights, weights_only=True)
     model.load_state_dict(best_state)

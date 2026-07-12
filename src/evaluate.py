@@ -87,6 +87,8 @@ def grad_cam(
     img_path,
     class_id,
     args,
+    data_dicts_sample=None,
+    dataset_info=None,
     rgb=True,
     device="cuda",
     alpha=0.4,
@@ -98,7 +100,17 @@ def grad_cam(
     from torchvision import transforms
 
     device = get_device()
-    test_transform = build_val_transform(args)
+    if data_dicts_sample is None:
+        data_dicts_sample = [
+            {
+                "image": img_path,
+                "mask": img_path.replace("/images/", "/masks/"),
+                "label": 0,
+            }
+        ]
+    if dataset_info is None:
+        dataset_info = {}
+    test_transform = build_val_transform(args, data_dicts_sample, dataset_info)
 
     acts = [0]
     grads = [0]

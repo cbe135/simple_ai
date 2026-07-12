@@ -7,7 +7,7 @@
 uv sync
 
 # 或使用 pip
-pip install -r requirements.txt
+pip install .
 ```
 
 ## 載入套件

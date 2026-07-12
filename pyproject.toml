@@ -1,5 +1,5 @@
 [project]
-name = "d3-hands-on-liver-classification"
+name = "simple-ai"
 version = "2026.2.0"
 description = "Hands-on: Classification of Liver With or Without Tumor on CT Images (CNN Classification)"
 requires-python = ">=3.10"

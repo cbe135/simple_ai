@@ -50,6 +50,13 @@ args = {
     },
 
     "threshold": 0.5,
+
+    # 額外的 transform（MONAI bundle 格式），附加在自動推導的預設 transform 之後
+    "transforms": {
+        "loaders_extra": [],
+        "preprocess_extra": [],
+        "augmentation_extra": [],
+    },
 }
 
 # 儲存設定
@@ -71,6 +78,29 @@ with open(f'{datetime.strftime(datetime.now(), "%m%d_%H%M%S")}_{args["environ"][
 | `lr` | 學習率 |
 | `timm_model` | 使用的預訓練模型 |
 | `threshold` | 二分類閾值 |
+
+## Transforms（額外 transform）
+
+預設的 transform（讀取、前處理、增強）會根據資料自動推導（`dataset_info.yaml` 的 `modality`、是否有 mask、檔案副檔名）。你可以在 `transforms` 區塊用 MONAI bundle 格式追加自己的 transform：
+
+```yaml
+transforms:
+  loaders_extra: []        # 附加在 LoadImaged / EnsureTyped 之後
+  preprocess_extra: []     # 附加在 Resize / 開窗 / MaskIntensity / RepeatChannel 之後
+  augmentation_extra: []   # 附加在 RandAffine / RandFlip / GaussianNoise 之後（僅訓練）
+```
+
+可使用 `@data.*` 參考上方 `data` 區塊的參數，例如：
+
+```yaml
+transforms:
+  preprocess_extra:
+    - _target_: monai.transforms.RandGaussianSmoothd
+      keys: ["image"]
+      sigma_x: [0.5, 1.0]
+```
+
+`_target_` 請使用完整路徑（如 `monai.transforms.RandFlipd`）。留空則只使用預設 transform。
 
 ## 環境設定
 

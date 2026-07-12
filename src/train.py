@@ -45,11 +45,14 @@ def train_one_epoch(args, model, criterion, optimizer, train_loader, val_loader)
     return train_loss, val_loss
 
 
-def train(args, model, criterion, optimizer, train_loader, val_loader):
+def train(args, model, criterion, optimizer, train_loader, val_loader, run_dir=None):
     """Full training loop. Saves best weights and returns loss record."""
-    save_dir = "/content"
-    os.makedirs(save_dir, exist_ok=True)
-    save_path = os.path.join(save_dir, "best_weights.pth")
+    if run_dir is None:
+        from src.env_setup import default_data_dir
+
+        run_dir = default_data_dir()
+    os.makedirs(run_dir, exist_ok=True)
+    save_path = os.path.join(run_dir, "best_weights.pth")
 
     record = {"train": [], "val": []}
     best_val_loss = np.inf
@@ -75,7 +78,7 @@ def train(args, model, criterion, optimizer, train_loader, val_loader):
     return record
 
 
-def train_pipeline(args, train_set, val_set):
+def train_pipeline(args, train_set, val_set, run_dir=None):
     """Complete training pipeline: create model, train, return results."""
     set_determinism(args["environ"]["seed"])
 
@@ -88,6 +91,8 @@ def train_pipeline(args, train_set, val_set):
     criterion = torch.nn.BCEWithLogitsLoss()
     optimizer = generate_optimizer(args, model)
 
-    record = train(args, model, criterion, optimizer, train_loader, val_loader)
+    record = train(
+        args, model, criterion, optimizer, train_loader, val_loader, run_dir
+    )
 
     return model, train_loader, val_loader, record

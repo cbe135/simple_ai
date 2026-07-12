@@ -1,4 +1,4 @@
-# D3/D4 Hands-on: CNN Classification
+# CNN Classification Pipeline
 
 Multi-task CNN classification pipeline using MONAI + PyTorch + timm. **All behavior is data-driven** — no hardcoded task names. The pipeline reads configuration from YAML files and derives transform pipelines from the data itself.
 
@@ -30,50 +30,70 @@ No `if task == ...` anywhere in code.
 - Python >= 3.10
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
 
-### D3 Liver CT (default)
+### Setup (separate steps)
 
 ```bash
-git clone https://github.com/cbe135/d3-hands-on-liver-classification.git
-cd d3-hands-on-liver-classification
+git clone https://github.com/<your-org>/simple-ai.git
+cd simple-ai
 uv sync
-uv run python src/main.py
 ```
 
-### D4 Chest X-ray Hackathon
+### Run
 
 ```bash
-git clone https://github.com/cbe135/d3-hands-on-liver-classification.git
-cd d3-hands-on-liver-classification
-uv sync
-uv run python src/main.py --config config_d4_hackathon.yaml
+python src/main.py --config config.yaml
 ```
 
-### One-liner
+Or with uv:
 
 ```bash
-git clone https://github.com/cbe135/d3-hands-on-liver-classification.git && cd d3-hands-on-liver-classification && uv sync && uv run python src/main.py --config config_d4_hackathon.yaml
+uv run python src/main.py --config config.yaml
+```
+
+### One-liner (run only)
+
+```bash
+python src/main.py --config config.yaml
 ```
 
 ## CLI
 
 ```
-python src/main.py [--config CONFIG_FILE]
+python src/main.py [--config CONFIG_FILE] [--data-dir DATA_DIR] [--output-dir OUTPUT_DIR]
 ```
 
 | Argument | Description |
 |---|---|
 | `--config` | Path to config YAML (default: `config.yaml`) |
+| `--data-dir` | Base directory containing the dataset directory (`environ.data_name`). Defaults to `/content` on Colab/Kaggle, else the current working directory. |
+| `--output-dir` | Parent directory for run outputs. A timestamped subdirectory (`YYYYMMDD_HHMMSS`) is created here holding the weights, loss curve, and config. Defaults to the current working directory. |
+
+### Examples
+
+```bash
+# Local run, data lives in ./my_data and outputs go to ./results
+python src/main.py --config config.yaml --data-dir ./my_data --output-dir ./results
+
+# Colab: data already in /content/liver_data, outputs in /content
+python src/main.py --config config.yaml
+```
+
+### Run output
+
+Each run creates a timestamped directory (e.g. `./20260712_211300/`) under `--output-dir` containing:
+
+| File | Description |
+|---|---|
+| `best_weights.pth` | Best model weights (lowest validation loss) |
+| `loss_curve.png` | Training / validation loss curve |
+| `config.yaml` | The resolved config used for this run |
 
 ## Project Structure
 
 ```
 ├── README.md
-├── pyproject.toml                    # uv project config
-├── requirements.txt                  # pip dependencies
-├── config.yaml                       # D3 Liver CT defaults
-├── config_d4_hackathon.yaml          # D4 Chest X-ray preset
-├── dataset_info_d3_liver_ct.yaml     # Example: modality: CT
-├── dataset_info_d4_hackathon.yaml    # Example: modality: X-ray
+├── pyproject.toml                    # uv project config (single source of dependencies)
+├── config.yaml                       # Default config (example: liver CT)
 ├── environment.md                    # Environment setup guide
 ├── 01-introduction.md                # Background & learning objectives
 ├── 02-setup-and-dependencies.md      # Install & imports
@@ -88,13 +108,13 @@ python src/main.py [--config CONFIG_FILE]
 │   ├── env_setup.py                  # Environment detection + data download
 │   ├── config.py                     # Config load/save
 │   ├── data.py                       # Data loading & splitting
-│   ├── transforms.py                 # Data-driven transform pipelines
+│   ├── transforms.py                 # Data-driven preset transforms + config extras
 │   ├── model.py                      # Model & optimizer creation
 │   ├── train.py                      # Training loop
 │   ├── evaluate.py                   # Inference, ROC, Grad-CAM
 │   ├── utils.py                      # Plotting helpers
 │   └── main.py                       # CLI entry point
-└── D3_Hands_on_2026_v2.ipynb         # Launcher notebook
+└── example.ipynb                     # Launcher notebook
 ```
 
 ## Data Setup
@@ -289,18 +309,41 @@ INFO - 350 training, 75 validation, 75 testing
 
 All parameters are in the config YAML. Key parameters:
 
-| Parameter | D3 Default | D4 Default | Description |
-|---|---|---|---|
-| `data_name` | `liver_data` | `Atelectasis` | Data directory name |
-| `data_source.file_ids` | 3 IDs | 1 ID | Google Drive file IDs |
-| `data_source.archive_format` | `zip` | `tar.gz` | Archive type |
-| `seed` | 888 | 42 | Random seed |
-| `spatial_size` | [250, 250] | [224, 224] | Image resize dimensions |
-| `a_min/a_max` | -125/200 | -125/200 | CT window range (HU) |
-| `num_epoch` | 3 | 10 | Training epochs |
-| `batch_size` | 128 | 16 | Batch size |
-| `lr` | 0.001 | 0.001 | Learning rate |
-| `timm_model` | resnet18 | resnet18 | Model architecture |
+| Parameter | Default | Description |
+|---|---|---|
+| `data_name` | `liver_data` | Data directory name |
+| `data_source.file_ids` | 3 IDs | Google Drive file IDs (example) |
+| `data_source.archive_format` | `zip` | Archive type |
+| `seed` | 888 | Random seed |
+| `spatial_size` | [250, 250] | Image resize dimensions |
+| `a_min/a_max` | -125/200 | CT window range (HU) |
+| `num_epoch` | 3 | Training epochs |
+| `batch_size` | 128 | Batch size |
+| `lr` | 0.001 | Learning rate |
+| `timm_model` | resnet18 | Model architecture |
+
+### Transforms (extras)
+
+The pipeline builds a **preset** transform set automatically from your data (`dataset_info.yaml` modality, whether masks exist, and file extensions). You can append your own MONAI transforms via the `transforms` block in the config, written in [MONAI bundle](https://docs.monai.io/en/stable/mb/config_syntax.html) format:
+
+```yaml
+transforms:
+  loaders_extra: []        # after LoadImaged / EnsureTyped
+  preprocess_extra: []     # after Resize / window / MaskIntensity / RepeatChannel
+  augmentation_extra: []   # after RandAffine / RandFlip / GaussianNoise (train only)
+```
+
+Example — add Gaussian smoothing to preprocessing (references `@data.*` from the config):
+
+```yaml
+transforms:
+  preprocess_extra:
+    - _target_: monai.transforms.RandGaussianSmoothd
+      keys: ["image"]
+      sigma_x: [0.5, 1.0]
+```
+
+Use the fully-qualified `_target_` (e.g. `monai.transforms.RandFlipd`). Leave the lists empty to use only the presets.
 
 ## Dependencies
 

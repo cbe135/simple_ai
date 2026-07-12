@@ -40,12 +40,26 @@ def mount_drive():
     drive.mount("drive", force_remount=True)
 
 
+def default_data_dir():
+    """Return the environment-aware base directory for data.
+
+    Colab / Kaggle use ``/content`` (the writable scratch space), while
+    local runs default to the current working directory.
+    """
+    env = detect_environment()
+    if env in ("colab", "kaggle"):
+        return "/content"
+    return os.getcwd()
+
+
 # ──────────────────────────────────────────────────────
 # Data setup
 # ──────────────────────────────────────────────────────
 
-def setup_data(args, data_dir="/content"):
+def setup_data(args, data_dir=None):
     """Set up data directory based on environment and config."""
+    if data_dir is None:
+        data_dir = default_data_dir()
     env = detect_environment()
     data_name = args["environ"]["data_name"]
     source = args["environ"].get("data_source", {})
@@ -167,10 +181,12 @@ def _extract_if_needed(data_dir, archive_name, target_dir):
         _extract(data_dir, archive_name, target_dir)
 
 
-def get_data_count(args):
+def get_data_count(args, data_dir=None):
     """Log the number of images (and masks if present)."""
     data_name = args["environ"]["data_name"]
-    data_dir = os.path.join("/content", data_name)
+    if data_dir is None:
+        data_dir = default_data_dir()
+    data_dir = os.path.join(data_dir, data_name)
     if not os.path.exists(data_dir):
         data_dir = os.path.join(os.getcwd(), data_name)
 
@@ -183,11 +199,13 @@ def get_data_count(args):
         logger.info(f"Number of masks: {len(os.listdir(masks_dir))}")
 
 
-def find_data_dir(args):
+def find_data_dir(args, data_dir=None):
     """Locate the actual data directory (might be nested)."""
+    if data_dir is None:
+        data_dir = default_data_dir()
     data_name = args["environ"]["data_name"]
     candidates = [
-        os.path.join("/content", data_name),
+        os.path.join(data_dir, data_name),
         os.path.join(os.getcwd(), data_name),
     ]
 

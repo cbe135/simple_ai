@@ -1,4 +1,4 @@
-# D3 Hands-on：CT 影像肝臟腫瘤分類（CNN）
+# CNN 影像分類：CT 肝臟腫瘤分類（Hands-on）
 
 **2026 Winter — 最後修改日期：2025/12/17**
 

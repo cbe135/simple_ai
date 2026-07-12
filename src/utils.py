@@ -58,7 +58,7 @@ def plot_transform_result(data, trans_data, with_mask=False, with_histogram=Fals
     plt.show()
 
 
-def plot_loss_curves(args, record):
+def plot_loss_curves(args, record, save_path=None):
     """Plot training and validation loss curves."""
     fig, axs = plt.subplots(1, 1, figsize=(10, 8))
     axs.plot(record["train"])
@@ -67,4 +67,6 @@ def plot_loss_curves(args, record):
     axs.set_ylabel("Loss")
     axs.set_xlabel("Epoch")
     axs.legend(["train", "val"], loc="lower left")
+    if save_path:
+        fig.savefig(save_path)
     plt.show()

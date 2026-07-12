@@ -146,12 +146,46 @@ def get_augmentation(args, dataset_info):
     return aug
 
 
+def _instantiate_bundle(args, key):
+    """Instantiate an extra transform list from config via MONAI ConfigParser.
+
+    The config section is a list of MONAI bundle `_target_` dicts. `@data.*`
+    references resolve against the rest of the config. Returns [] when empty.
+    """
+    items = (args.get("transforms") or {}).get(key) or []
+    if not items:
+        return []
+
+    from monai.bundle import ConfigParser
+
+    cp = ConfigParser(config=args)
+    return cp.get_parsed_content(f"transforms.{key}")
+
+
+def get_loaders_extra(args):
+    """Extra loader transforms appended after the auto-derived loaders."""
+    return _instantiate_bundle(args, "loaders_extra")
+
+
+def get_preprocess_extra(args):
+    """Extra preprocessing transforms appended after the auto-derived preprocess."""
+    return _instantiate_bundle(args, "preprocess_extra")
+
+
+def get_augmentation_extra(args):
+    """Extra augmentation transforms appended after the auto-derived augmentation."""
+    return _instantiate_bundle(args, "augmentation_extra")
+
+
 def build_train_transform(args, data_dicts_sample, dataset_info):
-    """Build full training transform."""
+    """Build full training transform (presets + user extras from config)."""
     return Compose(
         get_loaders(data_dicts_sample)
+        + get_loaders_extra(args)
         + get_preprocess(args, data_dicts_sample, dataset_info)
+        + get_preprocess_extra(args)
         + get_augmentation(args, dataset_info)
+        + get_augmentation_extra(args)
     )
 
 
@@ -159,5 +193,7 @@ def build_val_transform(args, data_dicts_sample, dataset_info):
     """Build validation/test transform (no augmentation)."""
     return Compose(
         get_loaders(data_dicts_sample)
+        + get_loaders_extra(args)
         + get_preprocess(args, data_dicts_sample, dataset_info)
+        + get_preprocess_extra(args)
     )

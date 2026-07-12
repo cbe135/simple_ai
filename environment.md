@@ -29,8 +29,8 @@ drive.mount('drive', force_remount=True)
 ### 4. 克隆 Repo 並安裝
 
 ```python
-!git clone https://github.com/cbe135/d3-hands-on-liver-classification.git
-%cd d3-hands-on-liver-classification
+!git clone https://github.com/<your-org>/simple-ai.git
+%cd simple-ai
 !uv sync
 ```
 
@@ -51,9 +51,9 @@ drive.mount('drive', force_remount=True)
 ### 2. 克隆 Repo
 
 ```python
-!git clone https://github.com/cbe135/d3-hands-on-liver-classification.git
-%cd d3-hands-on-liver-classification
-!pip install -r requirements.txt
+!git clone https://github.com/<your-org>/simple-ai.git
+%cd simple-ai
+!uv sync
 ```
 
 ### 3. 修改資料路徑
@@ -77,8 +77,8 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ### 2. 克隆並安裝
 
 ```bash
-git clone https://github.com/cbe135/d3-hands-on-liver-classification.git
-cd d3-hands-on-liver-classification
+git clone https://github.com/<your-org>/simple-ai.git
+cd simple-ai
 uv sync
 ```
 

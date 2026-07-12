@@ -23,11 +23,14 @@ def load_config(args, config_path=None):
         return yaml.safe_load(fp)
 
 
-def save_config(args):
-    """Save the current args to a timestamped YAML file."""
-    config_file = args["environ"]["config_file"]
-    timestamp = datetime.now().strftime("%m%d_%H%M%S")
-    filename = f"{timestamp}_{config_file}"
+def save_config(args, run_dir=None):
+    """Save the current args to a YAML file (``config.yaml`` in run_dir)."""
+    config_file = args["environ"].get("config_file", "config.yaml")
+    if run_dir is not None:
+        os.makedirs(run_dir, exist_ok=True)
+        filename = os.path.join(run_dir, "config.yaml")
+    else:
+        filename = config_file
     with open(filename, "w") as fp:
         yaml.dump(args, fp)
     return filename
