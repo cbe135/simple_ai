@@ -13,3 +13,4 @@ venv/
 !config.yaml
 .ipynb_checkpoints/
 *.log
+*.swp
