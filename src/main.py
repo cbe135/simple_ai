@@ -18,6 +18,23 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Select a valid matplotlib backend before any module imports pyplot.
+# A globally-configured "inline" backend (module://matplotlib_inline...)
+# only works inside a Jupyter/IPython kernel. When running headless
+# (e.g. `!uv run python src/main.py` from a notebook cell), fall back
+# to the non-interactive Agg backend so plotting/saving still works.
+import matplotlib
+
+try:
+    from IPython import get_ipython
+
+    _IN_NOTEBOOK = get_ipython() is not None
+except Exception:
+    _IN_NOTEBOOK = False
+
+if not _IN_NOTEBOOK and "inline" in matplotlib.get_backend().lower():
+    matplotlib.use("Agg")
+
 import yaml
 import numpy as np
 from monai.utils.misc import set_determinism
@@ -240,9 +257,18 @@ def main():
     test_loader = generate_dataloader(args, test_set)
     test_true, test_pred = infer(args, model, test_loader, True)
 
-    plot_roc_and_show_result(args, train_true, train_pred, title="Train")
-    plot_roc_and_show_result(args, val_true, val_pred, title="Validation")
-    plot_roc_and_show_result(args, test_true, test_pred, title="Test")
+    plot_roc_and_show_result(
+        args, train_true, train_pred, title="Train",
+        save_path=os.path.join(run_dir, "roc_train.png"),
+    )
+    plot_roc_and_show_result(
+        args, val_true, val_pred, title="Validation",
+        save_path=os.path.join(run_dir, "roc_validation.png"),
+    )
+    plot_roc_and_show_result(
+        args, test_true, test_pred, title="Test",
+        save_path=os.path.join(run_dir, "roc_test.png"),
+    )
 
     logger.info("Pipeline complete!")
 

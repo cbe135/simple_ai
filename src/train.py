@@ -2,7 +2,7 @@ import logging
 import os
 import numpy as np
 import torch
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 from monai.utils.misc import set_determinism
 
 from .model import create_timm_model, generate_optimizer, get_device

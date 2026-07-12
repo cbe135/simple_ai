@@ -22,6 +22,14 @@ dev = [
     "jupyter",
     "ipykernel",
 ]
+notebook = [
+    "matplotlib-inline",
+    "ipykernel",
+    "jupyter",
+]
+
+[tool.uv]
+default-extras = ["notebook"]
 
 [build-system]
 requires = ["setuptools>=68.0"]

@@ -47,7 +47,7 @@ def infer(args, model, data_loader, details=False):
     return y_true, y_pred
 
 
-def plot_roc_and_show_result(args, y_true, y_pred, title=""):
+def plot_roc_and_show_result(args, y_true, y_pred, title="", save_path=None):
     """Plot ROC curve and print confusion matrix metrics."""
     import matplotlib.pyplot as plt
 
@@ -64,6 +64,8 @@ def plot_roc_and_show_result(args, y_true, y_pred, title=""):
     plt.ylim([0, 1.05])
     plt.ylabel("Sensitivity")
     plt.xlabel("1 - Specificity")
+    if save_path:
+        plt.savefig(save_path)
     plt.show()
 
     y_pred_binary = np.where(np.array(y_pred) >= thres, 1, 0)
