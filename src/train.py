@@ -93,6 +93,13 @@ def train_pipeline(args, train_set, val_set, run_dir=None, device=None):
     else:
         dev_name = device
     logger.info("Using device: %s — %s", device, dev_name)
+    logger.info(
+        "Training config — batch_size: %d, num_workers: %d, cache_rate: %s, num_epoch: %d",
+        args["training"]["batch_size"],
+        int(args["data"].get("num_workers", 0)),
+        args["data"]["cache_rate"],
+        args["training"]["num_epoch"],
+    )
 
     model = create_timm_model(args).to(device)
 
