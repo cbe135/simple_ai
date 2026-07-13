@@ -35,6 +35,42 @@ DEFAULT_MODEL = "qwen2.5-coder:7b"
 # --------------------------------------------------------------------------- #
 # Ollama installation
 # --------------------------------------------------------------------------- #
+def _ensure_linux_deps() -> None:
+    """Ensure extraction tools the Ollama installer needs are present (e.g. zstd)."""
+    if shutil.which("zstd"):
+        return
+    logger.info("zstd missing; installing it (needed by the Ollama installer)...")
+
+    if shutil.which("apt-get"):
+        cmd = ["apt-get", "update", "-qq", "&&", "apt-get", "install", "-y", "zstd"]
+        runner = ["bash", "-c", " && ".join(cmd)]
+    elif shutil.which("dnf"):
+        runner = ["dnf", "install", "-y", "zstd"]
+    elif shutil.which("pacman"):
+        runner = ["pacman", "-S", "--noconfirm", "zstd"]
+    else:
+        raise SystemExit(
+            "Could not install 'zstd' automatically (no recognized package "
+            "manager). Install it manually, then re-run:\n"
+            "  Debian/Ubuntu: sudo apt-get install zstd\n"
+            "  RHEL/CentOS/Fedora: sudo dnf install zstd\n"
+            "  Arch: sudo pacman -S zstd"
+        )
+
+    try:
+        subprocess.run(runner, check=True)
+    except subprocess.CalledProcessError as e:
+        raise SystemExit(
+            f"Failed to install zstd: {e}\nInstall it manually, then re-run:\n"
+            "  Debian/Ubuntu: sudo apt-get install zstd\n"
+            "  RHEL/CentOS/Fedora: sudo dnf install zstd\n"
+            "  Arch: sudo pacman -S zstd"
+        )
+
+    if not shutil.which("zstd"):
+        raise SystemExit("zstd still not found after install. Install it manually and re-run.")
+
+
 def install_ollama(force: bool = False) -> None:
     """Install the Ollama CLI if missing (or when ``force``)."""
     if shutil.which("ollama") and not force:
@@ -47,6 +83,7 @@ def install_ollama(force: bool = False) -> None:
     system = sys.platform
     try:
         if system.startswith("linux"):
+            _ensure_linux_deps()
             logger.info("Installing Ollama via official install script...")
             subprocess.run(
                 "curl -fsSL https://ollama.com/install.sh | sh",
@@ -58,6 +95,7 @@ def install_ollama(force: bool = False) -> None:
                 logger.info("Installing Ollama via Homebrew...")
                 subprocess.run(["brew", "install", "ollama"], check=True)
             else:
+                _ensure_linux_deps()
                 logger.info("Installing Ollama via official install script...")
                 subprocess.run(
                     "curl -fsSL https://ollama.com/install.sh | sh",
