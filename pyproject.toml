@@ -5,6 +5,7 @@ description = "Hands-on: Classification of Liver With or Without Tumor on CT Ima
 requires-python = ">=3.10"
 dependencies = [
     "monai>=1.3.0",
+    "nibabel>=5.0.0",
     "timm>=0.9.0",
     "torch>=2.0.0",
     "torchvision>=0.15.0",
