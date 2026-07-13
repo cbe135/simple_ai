@@ -5,6 +5,8 @@ import logging
 
 from sklearn.model_selection import train_test_split
 
+from .model import get_device
+
 logger = logging.getLogger(__name__)
 
 
@@ -87,10 +89,22 @@ def generate_dataset(args, datalist, transform):
     return dataset
 
 
-def generate_dataloader(args, dataset, shuffle=False):
-    """Create a DataLoader from a dataset."""
+def generate_dataloader(args, dataset, shuffle=False, device=None):
+    """Create a DataLoader from a dataset.
+
+    Uses parallel workers and pinned memory (when on a GPU) so the device is
+    fed continuously instead of waiting on single-process CPU preprocessing.
+    """
     from monai.data import DataLoader
 
+    device = device or get_device()
+    num_workers = int(args["data"].get("num_workers", 0))
+
     return DataLoader(
-        dataset, batch_size=args["training"]["batch_size"], shuffle=shuffle
+        dataset,
+        batch_size=args["training"]["batch_size"],
+        shuffle=shuffle,
+        num_workers=num_workers,
+        pin_memory=(device != "cpu"),
+        persistent_workers=(num_workers > 0),
     )
