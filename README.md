@@ -383,10 +383,12 @@ Use the fully-qualified `_target_` (e.g. `monai.transforms.RandFlipd`). Leave th
 
 Two backends are supported:
 
-- **OpenRouter (default, free tier)** — needs `OPENROUTER_API_KEY` (env or
-  `.env`). Pass `--model <id>`.
-- **Local Ollama (Colab T4)** — pass `--local`. The CLI starts `ollama serve`,
-  pulls the model, and shuts it down on completion/interrupt.
+- **Local Ollama (default, Colab T4)** — this is the default. Run the one-time
+  setup first to install Ollama and verify your GPU/driver:
+  `simple_ai_autoresearch_setup`. The training CLI starts `ollama serve` if
+  needed, pulls the model, and shuts it down on completion/interrupt.
+- **OpenRouter (free tier)** — opt in with `--remote`; needs
+  `OPENROUTER_API_KEY` (env or `.env`). Pass `--model <id>`.
 
 ### Prerequisites & caveats
 
@@ -405,21 +407,37 @@ Two backends are supported:
 - Keep secrets only in `simple_ai/.env` (already gitignored). Never commit API
   keys.
 
+### Setup (run once, Colab T4)
+
+Installs Ollama if missing, starts it, verifies your GPU/driver match, and
+pre-pulls the default model (`qwen2.5-coder:7b`) so the long optimization loop
+starts clean:
+
+```bash
+simple_ai_autoresearch_setup            # install + verify GPU + pull model
+simple_ai_autoresearch_setup --no-pull  # skip the ~5GB model download
+```
+
+If setup reports CPU-only Ollama, switch to a CUDA 12.x T4 runtime (see
+caveats below) or use OpenRouter with `--remote`.
+
 ### Examples
 
 ```bash
-# Local Ollama on Colab T4 (download data, then optimize)
-simple_ai_autoresearch_train --local --gdown-id <gdrive-id> --runs 12
+# Local Ollama is the default (download data, then optimize)
+simple_ai_autoresearch_setup
+simple_ai_autoresearch_train --gdown-id <gdrive-id> --runs 12
 
-# OpenRouter free tier
+# OpenRouter free tier (opt in with --remote)
 export OPENROUTER_API_KEY=sk-or-...
-simple_ai_autoresearch_train --data-dir /content/dataset \
+simple_ai_autoresearch_train --remote --data-dir /content/dataset \
     --model meta-llama/llama-3.1-8b-instruct:free --runs 12
 ```
 
 Options: `--data-dir`, `--config` (default `config.yaml`),
 `--experiments` (default `experiments.tsv`), `--model`, `--base-url`,
-`--local`, `--unload-between-runs`, `--timeout` (default 700s),
+`--local` (default), `--remote` (use OpenRouter instead),
+`--unload-between-runs`, `--timeout` (default 700s),
 `--runs` (default 10), `--gdown-id`, `--data-name`.
 
 ## Dependencies

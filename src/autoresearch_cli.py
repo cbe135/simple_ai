@@ -5,16 +5,18 @@ The agent only edits ``config.yaml``; training is measured by validation loss.
 
 Examples
 --------
-    # Local Ollama (Colab T4), dataset already present
-    simple_ai_autoresearch_train --local --data-dir /content/dataset --runs 12
+    # Local Ollama is the default (Colab T4). Run setup first:
+    simple_ai_autoresearch_setup
+    # ...then optimize (dataset already present):
+    simple_ai_autoresearch_train --data-dir /content/dataset --runs 12
 
-    # OpenRouter free tier
+    # OpenRouter free tier (opt in with --remote)
     export OPENROUTER_API_KEY=sk-or-...
-    simple_ai_autoresearch_train --data-dir /content/dataset \\
+    simple_ai_autoresearch_train --remote --data-dir /content/dataset \\
         --model meta-llama/llama-3.1-8b-instruct:free --runs 12
 
     # Download the dataset from Google Drive first
-    simple_ai_autoresearch_train --local --gdown-id 1LNkF... --runs 12
+    simple_ai_autoresearch_train --gdown-id 1LNkF... --runs 12
 """
 
 import argparse
@@ -36,7 +38,18 @@ def main(argv=None):
         default=None,
         help="OpenAI-compatible base URL (default OpenRouter). Ignored with --local.",
     )
-    parser.add_argument("--local", action="store_true", help="Use a local Ollama server.")
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Use a local Ollama server (this is the default).",
+    )
+    parser.add_argument(
+        "--remote",
+        action="store_false",
+        dest="local",
+        help="Use OpenRouter instead of the local Ollama server (needs OPENROUTER_API_KEY).",
+    )
+    parser.set_defaults(local=True)
     parser.add_argument(
         "--unload-between-runs",
         action="store_true",

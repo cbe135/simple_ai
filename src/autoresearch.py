@@ -25,6 +25,8 @@ import logging
 import os
 import re
 import signal
+import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -127,8 +129,26 @@ def call_llm(client, model: str, system: str, user: str, max_tokens: int = 4096)
 _ollama_proc = None
 
 
+def _ollama_reachable() -> bool:
+    """Return True if an Ollama server already answers on ``OLLAMA_PORT``."""
+    try:
+        with socket.create_connection(("localhost", OLLAMA_PORT), timeout=2):
+            return True
+    except OSError:
+        return False
+
+
 def start_ollama() -> None:
     global _ollama_proc
+    if _ollama_reachable():
+        logger.info("Ollama server already running; reusing it.")
+        return
+    if shutil.which("ollama") is None:
+        raise SystemExit(
+            "Ollama binary not found. Run `simple_ai_autoresearch_setup` first to "
+            "install it, or install Ollama manually from https://ollama.com/download "
+            "(and select a GPU runtime on Colab)."
+        )
     _ollama_proc = subprocess.Popen(
         ["ollama", "serve"],
         stdout=subprocess.DEVNULL,

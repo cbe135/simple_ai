@@ -37,6 +37,7 @@ build-backend = "setuptools.build_meta"
 simple_ai_train = "src.cli:train_cmd"
 simple_ai_train_data = "src.prepare_data:main"
 simple_ai_autoresearch_train = "src.autoresearch_cli:main"
+simple_ai_autoresearch_setup = "src.autoresearch_setup:main"
 
 [tool.setuptools.packages.find]
 include = ["src*"]
