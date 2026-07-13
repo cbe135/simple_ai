@@ -439,6 +439,32 @@ immediately; the training command then reuses the already-running server:
 mount) instead of the default `~/.ollama/models`. The server only starts the
 API — the model itself is pulled and loaded on demand by the training command.
 
+#### Warm start and exposing the server to another Colab instance
+
+- **`--warm-start`** also loads the model into GPU memory (the cell blocks until
+  ready) and sets `OLLAMA_KEEP_ALIVE=-1` so it stays resident — useful when
+  another instance will drive this server.
+- **`--expose {proxy,localtunnel}`** prints an external URL so a *different* Colab
+  instance (or any machine) can reach this Ollama server:
+
+  ```python
+  # This instance — serve, warm the model, and expose it
+  !simple_ai_autoresearch_serve --warm-start --expose proxy
+  # or: !simple_ai_autoresearch_serve --warm-start --expose localtunnel
+  ```
+
+  - `proxy` (Method 1): uses Colab's native `google.colab.kernel.proxyPort`. The
+    URL is only reachable by **your Google account**. If the command can't access
+    `google.colab` (e.g. run via `!`), it prints the exact Python-cell snippet to
+    generate the URL instead.
+  - `localtunnel` (Method 2): spins up a **public** `https://….loca.lt` URL via
+    `npx localtunnel` (installs `nodejs`/`npm` if missing). Anyone with the URL
+    can reach the server.
+
+  The printed URL (append `/v1` for the OpenAI-compatible endpoint) is what the
+  other instance references. Bind address stays `127.0.0.1:11434`; both methods
+  forward to it locally.
+
 ### Examples
 
 ```bash
