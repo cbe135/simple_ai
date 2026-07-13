@@ -69,7 +69,7 @@ DEFAULT_ARGS = {
     "img_cnt": 5,
     "training": {
         "num_epoch": 3,
-        "batch_size": 128,
+        "batch_size": 4,
         "lr": 1e-3,
         "timm_model": "resnet18",
         "num_classes": 1,
