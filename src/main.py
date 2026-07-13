@@ -64,7 +64,7 @@ DEFAULT_ARGS = {
         "flip_prob": 0.5,
         "a_min": -125,
         "a_max": 200,
-        "cache_rate": 1,
+        "cache_rate": 0,
     },
     "img_cnt": 5,
     "training": {

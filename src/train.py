@@ -20,11 +20,11 @@ def train_one_epoch(args, model, criterion, optimizer, train_loader, val_loader)
     model.train()
     for data in train_loader:
         images = data["image"].to(device)
-        labels = data["label"].to(device)
+        labels = data["label"].to(device).float()
 
         optimizer.zero_grad()
         preds = model(images)
-        loss = criterion(preds, labels)
+        loss = criterion(preds, labels.reshape(preds.shape))
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
@@ -33,10 +33,10 @@ def train_one_epoch(args, model, criterion, optimizer, train_loader, val_loader)
     with torch.no_grad():
         for data in val_loader:
             images = data["image"].to(device)
-            labels = data["label"].to(device)
+            labels = data["label"].to(device).float()
 
             preds = model(images)
-            loss = criterion(preds, labels)
+            loss = criterion(preds, labels.reshape(preds.shape))
             val_loss += loss.item()
 
     train_loss /= len(train_loader)

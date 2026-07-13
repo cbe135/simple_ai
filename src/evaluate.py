@@ -2,7 +2,7 @@ import logging
 import os
 import numpy as np
 import torch
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 from sklearn.metrics import auc, confusion_matrix, roc_curve
 
 from .model import get_device
