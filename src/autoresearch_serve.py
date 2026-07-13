@@ -152,9 +152,9 @@ def main(argv=None):
     parser.add_argument(
         "--expose",
         choices=["none", "proxy", "localtunnel"],
-        default="none",
-        help="Expose the server to another Colab instance (proxy=account-only, "
-        "localtunnel=public). The external URL is printed.",
+        default="localtunnel",
+        help="Expose the server to another Colab instance (default: localtunnel=public "
+        "URL; proxy=Colab account-only URL; none=don't expose). The external URL is printed.",
     )
     args = parser.parse_args(argv)
 

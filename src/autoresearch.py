@@ -351,18 +351,27 @@ def run(args: dict) -> None:
     if local:
         if not model:
             model = "qwen2.5-coder:7b"
-        start_ollama()
-        ensure_ollama_model(model)
-        base_url = f"http://localhost:{OLLAMA_PORT}/v1"
-        api_key = "ollama"
-        atexit.register(stop_ollama)
+        ollama_base_url = args.get("ollama_base_url")
+        if ollama_base_url:
+            # Point at a remote Ollama server (e.g. exposed from another
+            # instance via `simple_ai_autoresearch_serve --expose`). We don't
+            # start or manage a local server in this case.
+            base_url = ollama_base_url
+            api_key = "ollama"
+            logger.info("Using remote Ollama server at %s", base_url)
+        else:
+            start_ollama()
+            ensure_ollama_model(model)
+            base_url = f"http://localhost:{OLLAMA_PORT}/v1"
+            api_key = "ollama"
+            atexit.register(stop_ollama)
 
-        def _on_signal(signum, frame):
-            stop_ollama()
-            sys.exit(1)
+            def _on_signal(signum, frame):
+                stop_ollama()
+                sys.exit(1)
 
-        signal.signal(signal.SIGINT, _on_signal)
-        signal.signal(signal.SIGTERM, _on_signal)
+            signal.signal(signal.SIGINT, _on_signal)
+            signal.signal(signal.SIGTERM, _on_signal)
     else:
         if not model:
             model = "meta-llama/llama-3.1-8b-instruct:free"

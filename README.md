@@ -444,13 +444,14 @@ API — the model itself is pulled and loaded on demand by the training command.
 - **`--warm-start`** also loads the model into GPU memory (the cell blocks until
   ready) and sets `OLLAMA_KEEP_ALIVE=-1` so it stays resident — useful when
   another instance will drive this server.
-- **`--expose {proxy,localtunnel}`** prints an external URL so a *different* Colab
-  instance (or any machine) can reach this Ollama server:
+- **`--expose {proxy,localtunnel}`** (default: **`localtunnel`**) prints an
+  external URL so a *different* Colab instance (or any machine) can reach this
+  Ollama server:
 
   ```python
-  # This instance — serve, warm the model, and expose it
-  !simple_ai_autoresearch_serve --warm-start --expose proxy
-  # or: !simple_ai_autoresearch_serve --warm-start --expose localtunnel
+  # This instance — serve, warm the model, and expose it (localtunnel by default)
+  !simple_ai_autoresearch_serve --warm-start --expose
+  # or explicitly: !simple_ai_autoresearch_serve --warm-start --expose proxy
   ```
 
   - `proxy` (Method 1): uses Colab's native `google.colab.kernel.proxyPort`. The
@@ -464,6 +465,15 @@ API — the model itself is pulled and loaded on demand by the training command.
   The printed URL (append `/v1` for the OpenAI-compatible endpoint) is what the
   other instance references. Bind address stays `127.0.0.1:11434`; both methods
   forward to it locally.
+
+  The **other** instance consumes it by passing that URL to the training command
+  (skips starting its own server):
+
+  ```bash
+  # Instance B — drive instance A's exposed Ollama from instance B's training
+  simple_ai_autoresearch_train --local --ollama-base-url https://abc123.loca.lt/v1 \
+      --data-dir /content/dataset --runs 12
+  ```
 
 ### Examples
 
@@ -480,6 +490,7 @@ simple_ai_autoresearch_train --remote --data-dir /content/dataset \
 
 Options: `--data-dir`, `--config` (default `config.yaml`),
 `--experiments` (default `experiments.tsv`), `--model`, `--base-url`,
+`--ollama-base-url` (remote Ollama URL with --local, e.g. `https://x.loca.lt/v1`),
 `--local` (default), `--remote` (use OpenRouter instead),
 `--unload-between-runs`, `--timeout` (default 700s),
 `--runs` (default 10), `--gdown-id`, `--data-name`.

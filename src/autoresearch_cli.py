@@ -39,6 +39,12 @@ def main(argv=None):
         help="OpenAI-compatible base URL (default OpenRouter). Ignored with --local.",
     )
     parser.add_argument(
+        "--ollama-base-url",
+        default=None,
+        help="Use a remote Ollama server (with --local). Full OpenAI-compatible URL "
+        "including /v1, e.g. https://abc.loca.lt/v1. Skips starting a local server.",
+    )
+    parser.add_argument(
         "--local",
         action="store_true",
         help="Use a local Ollama server (this is the default).",
