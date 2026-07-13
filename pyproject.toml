@@ -31,5 +31,8 @@ dev = [
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
+[project.scripts]
+simple_ai_train = "src.cli:train_cmd"
+
 [tool.setuptools.packages.find]
 include = ["src*"]

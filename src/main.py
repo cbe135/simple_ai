@@ -192,6 +192,12 @@ def main():
 
     args = load_config(args_cli.config)
     logger.info(f"Config file: {args['environ']['config_file']}")
+    logger.info(
+        f"Effective settings — cache_rate: {args['data']['cache_rate']}, "
+        f"batch_size: {args['training']['batch_size']}, "
+        f"num_epoch: {args['training']['num_epoch']}, "
+        f"spatial_size: {args['data']['spatial_size']}"
+    )
     set_determinism(args["environ"]["seed"])
 
     # Resolve data directory
@@ -206,7 +212,9 @@ def main():
 
     # Run output directory: <output_dir>/<YYYYMMDD_HHMMSS>/
     output_base = args_cli.output_dir or os.getcwd()
-    run_dir = os.path.join(output_base, datetime.now().strftime("%Y%m%d_%H%M%S"))
+    run_dir = os.path.abspath(
+        os.path.join(output_base, datetime.now().strftime("%Y%m%d_%H%M%S"))
+    )
     os.makedirs(run_dir, exist_ok=True)
     logger.info(f"Run output directory: {run_dir}")
 
@@ -262,6 +270,29 @@ def main():
     val_set = generate_dataset(args, val_dicts, val_transform)
     test_set = generate_dataset(args, test_dicts, val_transform)
 
+    # ── Data summary (mirrors the D4 notebook diagnostics) ──────────────────
+    # Label distribution per split, counted from the dicts (no image loading).
+    def _label_dist(name, dicts):
+        pos = sum(1 for a in dicts if a["label"] == 1)
+        neg = len(dicts) - pos
+        logger.info(
+            f"{name} label distribution — total: {len(dicts)}, "
+            f"positive: {pos}, negative: {neg}"
+        )
+
+    _label_dist("Train", train_dicts)
+    _label_dist("Validation", val_dicts)
+    _label_dist("Test", test_dicts)
+
+    # Sample image size + intensity range after the transform pipeline.
+    sample = train_set[0]
+    img = sample["image"]
+    logger.info(f"Sample image — shape: {tuple(img.shape)}, dtype: {img.dtype}")
+    logger.info(
+        f"Sample image intensity — min: {float(img.min()):.4f}, "
+        f"max: {float(img.max()):.4f}"
+    )
+
     # Train
     logger.info("Starting training...")
     from src.train import train_pipeline
@@ -308,6 +339,10 @@ def main():
         save_path=os.path.join(run_dir, "roc_test.png"),
     )
 
+    logger.info(
+        f"Artifacts saved in {run_dir}: best_weights.pth, loss_curve.png, "
+        f"roc_train.png, roc_validation.png, roc_test.png"
+    )
     logger.info("Pipeline complete!")
 
 

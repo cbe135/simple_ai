@@ -22,13 +22,13 @@ data:
   flip_prob: 0.5
   a_min: -125
   a_max: 200
-  cache_rate: 1
+  cache_rate: 0
 
 img_cnt: 5
 
 training:
   num_epoch: 3
-  batch_size: 128
+  batch_size: 4
   lr: 0.001
   timm_model: resnet18
   num_classes: 1

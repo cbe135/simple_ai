@@ -66,6 +66,7 @@ def train(args, model, criterion, optimizer, train_loader, val_loader, run_dir=N
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             torch.save(model.state_dict(), save_path)
+            logger.info(f"Saved best weights to {save_path}")
 
         record["train"].append(train_loss)
         record["val"].append(val_loss)
