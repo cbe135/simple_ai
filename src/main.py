@@ -199,7 +199,18 @@ def main():
         )
     )
     logging.getLogger().addHandler(_file_handler)
-    logger.info(f"Logging to console and {_log_path}")
+    # Mirror logs to stdout as well: cli.py pipes stdout to run.log, but stderr
+    # is inherited (the cell TTY) so tqdm renders in place there. Without this
+    # handler, log lines would only reach the cell and not run.log.
+    _stdout_handler = logging.StreamHandler(sys.stdout)
+    _stdout_handler.setFormatter(
+        logging.Formatter(
+            "[%(asctime)s.%(msecs)03d][%(levelname)5s](%(name)s) - %(message)s",
+            "%Y-%m-%d %H:%M:%S",
+        )
+    )
+    logging.getLogger().addHandler(_stdout_handler)
+    logger.info(f"Logging to console, {_log_path}, and run.log (via stdout)")
 
     args = load_config(args_cli.config)
     logger.info(f"Config file: {args['environ']['config_file']}")
