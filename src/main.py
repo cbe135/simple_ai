@@ -340,13 +340,22 @@ def main():
     best_state = torch.load(best_weights, weights_only=True)
     model.load_state_dict(best_state)
 
-    train_true, train_pred = infer(args, model, train_loader, True, device=args_cli.device)
-    val_true, val_pred = infer(args, model, val_loader, True, device=args_cli.device)
+    train_true, train_pred = infer(
+        args, model, train_loader, True, device=args_cli.device,
+        details_path=os.path.join(run_dir, "inference_details_train.log"),
+    )
+    val_true, val_pred = infer(
+        args, model, val_loader, True, device=args_cli.device,
+        details_path=os.path.join(run_dir, "inference_details_validation.log"),
+    )
 
     from src.data import generate_dataloader
 
     test_loader = generate_dataloader(args, test_set, device=args_cli.device)
-    test_true, test_pred = infer(args, model, test_loader, True, device=args_cli.device)
+    test_true, test_pred = infer(
+        args, model, test_loader, True, device=args_cli.device,
+        details_path=os.path.join(run_dir, "inference_details_test.log"),
+    )
 
     plot_roc_and_show_result(
         args, train_true, train_pred, title="Train",
@@ -363,7 +372,9 @@ def main():
 
     logger.info(
         f"Artifacts saved in {run_dir}: best_weights.pth, loss_curve.png, "
-        f"roc_train.png, roc_validation.png, roc_test.png"
+        f"roc_train.png, roc_validation.png, roc_test.png, "
+        f"inference_details_train.log, inference_details_validation.log, "
+        f"inference_details_test.log"
     )
     logger.info("Pipeline complete!")
 

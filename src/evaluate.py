@@ -11,8 +11,15 @@ from .transforms import build_val_transform
 logger = logging.getLogger(__name__)
 
 
-def infer(args, model, data_loader, details=False, device=None):
-    """Run inference and return true labels and predictions."""
+def infer(args, model, data_loader, details=False, device=None, details_path=None):
+    """Run inference and return true labels and predictions.
+
+    When ``details`` is True and ``details_path`` is given, the per-image
+    match/mismatch lines are written to that file instead of printed to the
+    console (which would otherwise flood stdout / run.log across thousands of
+    images). If ``details_path`` is None, the lines are printed for backwards
+    compatibility.
+    """
     device = device or get_device()
     logger.info("Using device for inference: %s", device)
     sigmoid = torch.nn.Sigmoid()
@@ -21,29 +28,37 @@ def infer(args, model, data_loader, details=False, device=None):
     y_true = []
     y_pred = []
 
-    model.eval()
-    with torch.no_grad():
-        for data in tqdm(data_loader):
-            images = data["image"].to(device)
-            labels = data["label"].to(device)
+    details_fh = open(details_path, "w") if (details and details_path) else None
+    try:
+        model.eval()
+        with torch.no_grad():
+            for data in tqdm(data_loader):
+                images = data["image"].to(device)
+                labels = data["label"].to(device)
 
-            preds = sigmoid(model(images))
+                preds = sigmoid(model(images))
 
-            for i, (pred, label) in enumerate(zip(preds, labels)):
-                y_pred.append(pred.item())
-                y_true.append(label.item())
+                for i, (pred, label) in enumerate(zip(preds, labels)):
+                    y_pred.append(pred.item())
+                    y_true.append(label.item())
 
-                if details:
-                    binary_pred = (pred >= thres).float()
-                    filename = images.meta["filename_or_obj"][i]
-                    if binary_pred != label:
-                        print(
-                            f"{filename} mismatch: pred={binary_pred.item()}, label={label.item()}"
+                    if details:
+                        binary_pred = (pred >= thres).float()
+                        filename = images.meta["filename_or_obj"][i]
+                        line = (
+                            f"{filename} mismatch: pred={binary_pred.item()}, "
+                            f"label={label.item()}"
+                            if binary_pred != label
+                            else f"{filename} match: pred={binary_pred.item()}, "
+                            f"label={label.item()}"
                         )
-                    else:
-                        print(
-                            f"{filename} match: pred={binary_pred.item()}, label={label.item()}"
-                        )
+                        if details_fh is not None:
+                            details_fh.write(line + "\n")
+                        else:
+                            print(line)
+    finally:
+        if details_fh is not None:
+            details_fh.close()
 
     return y_true, y_pred
 
