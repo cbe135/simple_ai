@@ -14,13 +14,10 @@ def load_data_list(args, data_dir=None):
     Supports data_list.yaml (preferred) with a data_list.json fallback.
     Both are expected to expose a top-level "data" key.
     """
-    data_name = args["environ"]["data_name"]
     if data_dir is None:
         from src.env_setup import default_data_dir
 
-        data_dir = os.path.join(default_data_dir(), data_name)
-        if not os.path.exists(data_dir):
-            data_dir = os.path.join(os.getcwd(), data_name)
+        data_dir = default_data_dir()
 
     yaml_path = os.path.join(data_dir, "data_list.yaml")
     json_path = os.path.join(data_dir, "data_list.json")

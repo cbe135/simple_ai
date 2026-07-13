@@ -33,40 +33,62 @@ No `if task == ...` anywhere in code.
 ### Setup (separate steps)
 
 ```bash
-git clone https://github.com/<your-org>/simple-ai.git
-cd simple-ai
+git clone https://github.com/cbe135/simple_ai.git
+cd simple_ai
 uv sync
 ```
+
+### Prepare data (run once)
+
+The pipeline does **not** download data. The directory you pass to
+`--data-dir` must already contain:
+
+- `data_list.yaml` (or `data_list.json`) — the image/mask/label entries
+- `dataset_info.yaml` — the modality (`CT` | `X-ray` | `MRI` | ...)
+- `images/` (and optional `masks/`)
+
+If you need to fetch the example dataset from Google Drive, use the
+standalone preparation script (idempotent — safe to re-run):
+
+```bash
+python src/prepare_data.py \
+    --data-dir /content/liver_data \
+    --file-ids 1LNkF... 1vki3... 1ueP6... \
+    --archive-format zip
+```
+
+Or place your data manually so that `--data-dir` points at the folder
+holding `data_list.yaml` / `dataset_info.yaml`.
 
 ### Run
 
 ```bash
-python src/main.py --config config.yaml
+python src/main.py --config config.yaml --data-dir /content/liver_data
 ```
 
 Or with uv:
 
 ```bash
-uv run python src/main.py --config config.yaml
+uv run python src/main.py --config config.yaml --data-dir /content/liver_data
 ```
 
 ### One-liner (run only)
 
 ```bash
-python src/main.py --config config.yaml
+python src/main.py --config config.yaml --data-dir /content/liver_data
 ```
 
 ## CLI
 
 ```
-python src/main.py [--config CONFIG_FILE] [--data-dir DATA_DIR] [--output-dir OUTPUT_DIR]
+python src/main.py --config CONFIG_FILE --data-dir DATA_DIR [--output-dir OUTPUT_DIR]
 ```
 
 | Argument | Description |
 |---|---|
 | `--config` | Path to config YAML (default: `config.yaml`) |
-| `--data-dir` | Base directory containing the dataset directory (`environ.data_name`). Defaults to `/content` on Colab/Kaggle, else the current working directory. |
-| `--output-dir` | Parent directory for run outputs. A timestamped subdirectory (`YYYYMMDD_HHMMSS`) is created here holding the weights, loss curve, and config. Defaults to the current working directory. |
+| `--data-dir` | **Required.** Directory containing `data_list.yaml` (or `data_list.json`) and `dataset_info.yaml`, e.g. `/content/liver_data`. |
+| `--output-dir` | Parent directory for run outputs. A timestamped subdirectory (`YYYYMMDD_HHMMSS`) is created here holding the weights, loss curve, config, and ROC PNGs. Defaults to the current working directory. |
 
 ### Examples
 
@@ -75,7 +97,7 @@ python src/main.py [--config CONFIG_FILE] [--data-dir DATA_DIR] [--output-dir OU
 python src/main.py --config config.yaml --data-dir ./my_data --output-dir ./results
 
 # Colab: data already in /content/liver_data, outputs in /content
-python src/main.py --config config.yaml
+python src/main.py --config config.yaml --data-dir /content/liver_data
 ```
 
 ### Run output
@@ -86,6 +108,7 @@ Each run creates a timestamped directory (e.g. `./20260712_211300/`) under `--ou
 |---|---|
 | `best_weights.pth` | Best model weights (lowest validation loss) |
 | `loss_curve.png` | Training / validation loss curve |
+| `roc_train.png` / `roc_validation.png` / `roc_test.png` | ROC curves for each split |
 | `config.yaml` | The resolved config used for this run |
 
 ## Project Structure
@@ -105,7 +128,8 @@ Each run creates a timestamped directory (e.g. `./20260712_211300/`) under `--ou
 ├── 08-evaluation.md                  # ROC, AUC, confusion matrix, Grad-CAM
 ├── src/
 │   ├── __init__.py
-│   ├── env_setup.py                  # Environment detection + data download
+│   ├── env_setup.py                  # Environment detection + data dir discovery
+│   ├── prepare_data.py               # Standalone: download + extract data (run once)
 │   ├── config.py                     # Config load/save
 │   ├── data.py                       # Data loading & splitting
 │   ├── transforms.py                 # Data-driven preset transforms + config extras

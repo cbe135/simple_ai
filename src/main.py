@@ -45,8 +45,6 @@ DEFAULT_ARGS = {
     "environ": {
         "config_file": "config.yaml",
         "seed": 888,
-        "data_name": "liver_data",
-        "data_source": {},
     },
     "data": {
         "train_percentage": 0.8,
@@ -124,12 +122,10 @@ def main():
     parser.add_argument(
         "--data-dir",
         type=str,
-        default=None,
+        required=True,
         help=(
-            "Base directory where the dataset directory "
-            "(args['environ']['data_name']) lives. "
-            "Defaults to /content on Colab/Kaggle, else the current "
-            "working directory."
+            "Directory containing data_list.yaml (or data_list.json) and "
+            "dataset_info.yaml, e.g. /content/liver_data. Required."
         ),
     )
     parser.add_argument(
@@ -152,19 +148,18 @@ def main():
     )
 
     args = load_config(args_cli.config)
-    logger.info(f"Data: {args['environ']['data_name']}")
+    logger.info(f"Config file: {args['environ']['config_file']}")
     set_determinism(args["environ"]["seed"])
 
-    # Resolve data base directory
+    # Resolve data directory
     from src.env_setup import (
         setup_data,
         get_data_count,
         find_data_dir,
-        default_data_dir,
     )
 
-    data_dir = args_cli.data_dir or default_data_dir()
-    logger.info(f"Using data base directory: {data_dir}")
+    data_dir = args_cli.data_dir
+    logger.info(f"Using data directory: {data_dir}")
 
     # Run output directory: <output_dir>/<YYYYMMDD_HHMMSS>/
     output_base = args_cli.output_dir or os.getcwd()
@@ -183,7 +178,7 @@ def main():
 
     # Find data directory and load data list
     data_dir = find_data_dir(args, data_dir)
-    logger.info(f"Using data directory: {data_dir}")
+    logger.info(f"Resolved data directory: {data_dir}")
 
     # Load data list
     with open(os.path.join(data_dir, "data_list.yaml"), "r") as fp:

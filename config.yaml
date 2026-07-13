@@ -4,13 +4,6 @@
 environ:
   config_file: config.yaml
   seed: 888
-  data_name: liver_data
-  data_source:
-    file_ids:
-      - "1LNkFfchl4YwKzLJ5SVDovhyvmw6vUUMf"
-      - "1vki3HykS0akuKoyLQ11yTtmucr-T4leZ"
-      - "1ueP6RT9NAxMO2khrqFDvIGHyCYglH0eE"
-    archive_format: zip
 
 data:
   train_percentage: 0.8
