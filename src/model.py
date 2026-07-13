@@ -12,8 +12,27 @@ def create_timm_model(args):
 
 
 def generate_optimizer(args, model):
-    """Create an Adam optimizer."""
-    return torch.optim.Adam(model.parameters(), lr=args["training"]["lr"])
+    """Create an optimizer from the config.
+
+    Supports ``training.optimizer.name`` of: adam, adamw, sgd.
+    Extra kwargs (lr, weight_decay, momentum) are read from the config and
+    only passed to the optimizers that accept them.
+    """
+    t = args.get("training", {})
+    opt_cfg = t.get("optimizer", {}) or {}
+    name = (opt_cfg.get("name") or "adam").lower()
+    lr = t.get("lr", 0.001)
+    weight_decay = opt_cfg.get("weight_decay", 0.0)
+    momentum = opt_cfg.get("momentum", 0.9)
+
+    params = model.parameters()
+    if name == "sgd":
+        return torch.optim.SGD(params, lr=lr, momentum=momentum, weight_decay=weight_decay)
+    if name == "adamw":
+        return torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
+    if name == "adam":
+        return torch.optim.Adam(params, lr=lr, weight_decay=weight_decay)
+    raise ValueError(f"Unsupported optimizer name: {name!r}")
 
 
 def get_device(override=None):

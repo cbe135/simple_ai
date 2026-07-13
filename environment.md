@@ -46,7 +46,7 @@ drive.mount('drive', force_remount=True)
 
 ### 1. 上傳資料
 
-將 `liver_data.zip` 上傳為 Kaggle Dataset，並在 Notebook 的 Input 中掛載。
+將 `<your-dataset>.zip` 上傳為 Kaggle Dataset，並在 Notebook 的 Input 中掛載。
 
 ### 2. 克隆 Repo
 
@@ -91,7 +91,7 @@ uv sync
 uv pip install gdown
 
 # 下載資料（使用 Google Drive ID）
-gdown "https://drive.google.com/uc?id=1LNkFfchl4YwKzLJ5SVDovhyvmw6vUUMf" -O liver_data.zip
+gdown "https://drive.google.com/uc?id=<your-gdown-file-id>" -O dataset.zip
 ```
 
 或直接使用 Medical Segmentation Decathlon 的公開資料集。

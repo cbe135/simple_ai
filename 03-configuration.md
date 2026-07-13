@@ -13,7 +13,7 @@ args = {
     "environ": {
         "config_file": "config.yaml",
         "seed": 888,
-        "data_name": "liver_data",
+        "data_name": "dataset",
     },
 
     "data": {

@@ -1,4 +1,4 @@
-# Default config (example: liver CT)
+# Default config (example: image classification)
 # Run: python src/main.py --config config.yaml
 
 environ:
@@ -33,6 +33,12 @@ training:
   lr: 0.001
   timm_model: resnet18
   num_classes: 1
+  optimizer:
+    name: adam
+    weight_decay: 0.0
+    momentum: 0.9
+  loss:
+    name: bce_with_logits
 
 threshold: 0.5
 

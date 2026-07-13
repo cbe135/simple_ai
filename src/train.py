@@ -13,20 +13,45 @@ from .utils import tqdm_disabled
 logger = logging.getLogger(__name__)
 
 
+def build_criterion(args):
+    """Create the loss function from ``training.loss.name``.
+
+    ``bce_with_logits`` (default) is for binary classification with
+    ``num_classes: 1`` and expects float targets. ``cross_entropy`` is for
+    multi-class (``num_classes > 1``) and expects long class-index targets.
+    """
+    loss_cfg = (args.get("training", {}) or {}).get("loss", {}) or {}
+    name = (loss_cfg.get("name") or "bce_with_logits").lower()
+    if name == "cross_entropy":
+        return torch.nn.CrossEntropyLoss()
+    if name == "bce_with_logits":
+        return torch.nn.BCEWithLogitsLoss()
+    raise ValueError(f"Unsupported loss name: {name!r}")
+
+
+def _target_for_loss(labels, loss_name):
+    """Coerce labels to the dtype/shape the criterion expects."""
+    if loss_name == "cross_entropy":
+        return labels.long().squeeze(-1)
+    return labels.float()
+
+
 def train_one_epoch(args, model, criterion, optimizer, train_loader, val_loader, device=None):
     """Train for one epoch and return train/val loss."""
     device = device or get_device()
+    loss_name = ((args.get("training", {}) or {}).get("loss", {}) or {}).get("name", "bce_with_logits")
     train_loss = 0.0
     val_loss = 0.0
 
     model.train()
     for data in train_loader:
         images = data["image"].to(device)
-        labels = data["label"].to(device).float()
+        labels = data["label"].to(device)
 
         optimizer.zero_grad()
         preds = model(images)
-        loss = criterion(preds, labels.reshape(preds.shape))
+        target = _target_for_loss(labels, loss_name)
+        loss = criterion(preds, target.reshape(preds.shape) if loss_name != "cross_entropy" else target)
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
@@ -35,10 +60,11 @@ def train_one_epoch(args, model, criterion, optimizer, train_loader, val_loader,
     with torch.no_grad():
         for data in val_loader:
             images = data["image"].to(device)
-            labels = data["label"].to(device).float()
+            labels = data["label"].to(device)
 
             preds = model(images)
-            loss = criterion(preds, labels.reshape(preds.shape))
+            target = _target_for_loss(labels, loss_name)
+            loss = criterion(preds, target.reshape(preds.shape) if loss_name != "cross_entropy" else target)
             val_loss += loss.item()
 
     train_loss /= len(train_loader)
@@ -107,7 +133,7 @@ def train_pipeline(args, train_set, val_set, run_dir=None, device=None):
     train_loader = generate_dataloader(args, train_set, shuffle=True, device=device)
     val_loader = generate_dataloader(args, val_set, device=device)
 
-    criterion = torch.nn.BCEWithLogitsLoss()
+    criterion = build_criterion(args)
     optimizer = generate_optimizer(args, model)
 
     record = train(

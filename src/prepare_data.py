@@ -144,7 +144,7 @@ def _extract_if_needed(data_dir, archive_name, target_dir):
 def prepare(args):
     """Prepare the data directory: download + extract as needed."""
     data_dir = args.data_dir
-    data_name = args.data_name or os.path.basename(data_dir.rstrip("/")) or "liver_data"
+    data_name = args.data_name or os.path.basename(data_dir.rstrip("/")) or "dataset"
     archive_fmt = args.archive_format
     file_ids = args.file_ids or []
 
@@ -169,7 +169,7 @@ def prepare(args):
     return target_dir
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Prepare dataset (download + extract) for the pipeline"
     )
@@ -177,7 +177,7 @@ def main():
         "--data-dir",
         type=str,
         required=True,
-        help="Target data directory that will contain data_list.yaml (e.g. /content/liver_data).",
+        help="Target data directory that will contain data_list.yaml (e.g. /content/dataset).",
     )
     parser.add_argument(
         "--data-name",
@@ -191,6 +191,12 @@ def main():
         nargs="+",
         default=None,
         help="One or more Google Drive file IDs to download via gdown.",
+    )
+    parser.add_argument(
+        "--gdown-id",
+        type=str,
+        default=None,
+        help="Convenience alias for a single Google Drive file ID (sets --file-ids).",
     )
     parser.add_argument(
         "--archive-format",
@@ -207,7 +213,10 @@ def main():
             "archive_format) and environ.data_name as defaults."
         ),
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+
+    if args.gdown_id and not args.file_ids:
+        args.file_ids = [args.gdown_id]
 
     logging.basicConfig(
         level=logging.INFO,

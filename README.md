@@ -116,7 +116,7 @@ Each run creates a timestamped directory (e.g. `./20260712_211300/`) under `--ou
 ```
 ├── README.md
 ├── pyproject.toml                    # uv project config (single source of dependencies)
-├── config.yaml                       # Default config (example: liver CT)
+├── config.yaml                       # Default config (example: image classification)
 ├── environment.md                    # Environment setup guide
 ├── 01-introduction.md                # Background & learning objectives
 ├── 02-setup-and-dependencies.md      # Install & imports
@@ -176,7 +176,7 @@ Specify data source for auto-download:
 
 ```yaml
 environ:
-  data_name: liver_data
+  data_name: dataset
   data_source:
     file_ids: ["1LNkFfchl4YwKzLJ5SVDovhyvmw6vUUMf"]
     archive_format: zip    # zip or tar.gz
@@ -335,7 +335,7 @@ All parameters are in the config YAML. Key parameters:
 
 | Parameter | Default | Description |
 |---|---|---|
-| `data_name` | `liver_data` | Data directory name |
+| `data_name` | `dataset` | Data directory name |
 | `data_source.file_ids` | 3 IDs | Google Drive file IDs (example) |
 | `data_source.archive_format` | `zip` | Archive type |
 | `seed` | 888 | Random seed |
@@ -369,6 +369,59 @@ transforms:
 
 Use the fully-qualified `_target_` (e.g. `monai.transforms.RandFlipd`). Leave the lists empty to use only the presets.
 
+## Autonomous Research (`autoresearch`)
+
+`simple_ai_autoresearch_train` lets an LLM agent improve training by editing
+**only** `config.yaml`. Each run:
+
+1. The LLM proposes a new `config.yaml` (given the current one + history).
+2. The pipeline trains for a short budget (`uv run python src/main.py ...`).
+3. The final `Validation loss:` line is parsed — **lower is better**.
+4. If it improves on the best known loss, the config is committed; otherwise it
+   is discarded (`git checkout config.yaml`). Every run is logged to
+   `experiments.tsv`. The LLM call and training are fully sequential.
+
+Two backends are supported:
+
+- **OpenRouter (default, free tier)** — needs `OPENROUTER_API_KEY` (env or
+  `.env`). Pass `--model <id>`.
+- **Local Ollama (Colab T4)** — pass `--local`. The CLI starts `ollama serve`,
+  pulls the model, and shuts it down on completion/interrupt.
+
+### Prerequisites & caveats
+
+- Install `uv` and the project (`uv pip install -e .`). Training runs as
+  `uv run python src/main.py ...`.
+- OpenRouter free-tier models are rate-limited (~20 req/min, ~200 req/day).
+  Both limits apply to **all** `:free` models on the same key, so keep `--runs`
+  modest and avoid concurrent jobs.
+- **Colab T4 + Ollama GPU requirement:** Ollama needs a CUDA ≥ 12 runtime. In
+  Colab, choose *Runtime ▸ Change runtime type ▸ T4 GPU* and a **CUDA 12.x**
+  image. With an older CUDA driver, Ollama silently falls back to **CPU-only**
+  (the CLI warns when it detects this) and training is very slow — in that case
+  use OpenRouter instead. (TPU v5e runtimes are **not** supported by Ollama.)
+- Use `--unload-between-runs` on T4 to free VRAM between the LLM call and
+  training.
+- Keep secrets only in `simple_ai/.env` (already gitignored). Never commit API
+  keys.
+
+### Examples
+
+```bash
+# Local Ollama on Colab T4 (download data, then optimize)
+simple_ai_autoresearch_train --local --gdown-id <gdrive-id> --runs 12
+
+# OpenRouter free tier
+export OPENROUTER_API_KEY=sk-or-...
+simple_ai_autoresearch_train --data-dir /content/dataset \
+    --model meta-llama/llama-3.1-8b-instruct:free --runs 12
+```
+
+Options: `--data-dir`, `--config` (default `config.yaml`),
+`--experiments` (default `experiments.tsv`), `--model`, `--base-url`,
+`--local`, `--unload-between-runs`, `--timeout` (default 700s),
+`--runs` (default 10), `--gdown-id`, `--data-name`.
+
 ## Dependencies
 
 | Package | Purpose |
@@ -379,6 +432,8 @@ Use the fully-qualified `_target_` (e.g. `monai.transforms.RandFlipd`). Leave th
 | scikit-learn | Evaluation metrics |
 | matplotlib | Visualization |
 | gdown | Google Drive data download |
+| openai | OpenAI-compatible LLM client (autoresearch) |
+| python-dotenv | Load `.env` for API keys (autoresearch) |
 
 ## License
 
