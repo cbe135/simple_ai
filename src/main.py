@@ -182,10 +182,15 @@ def main():
     )
     args_cli = parser.parse_args()
 
+    # Send the default handler to stdout (not stderr). cli.py pipes stdout to
+    # both the cell and run.log, so a single handler covers the console and the
+    # log file. This avoids the duplicate output caused by having separate
+    # stderr + stdout handlers both reaching the terminal.
     logging.basicConfig(
         level=logging.INFO,
         format="[%(asctime)s.%(msecs)03d][%(levelname)5s](%(name)s) - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,
         force=True,
     )
 
@@ -199,18 +204,7 @@ def main():
         )
     )
     logging.getLogger().addHandler(_file_handler)
-    # Mirror logs to stdout as well: cli.py pipes stdout to run.log, but stderr
-    # is inherited (the cell TTY) so tqdm renders in place there. Without this
-    # handler, log lines would only reach the cell and not run.log.
-    _stdout_handler = logging.StreamHandler(sys.stdout)
-    _stdout_handler.setFormatter(
-        logging.Formatter(
-            "[%(asctime)s.%(msecs)03d][%(levelname)5s](%(name)s) - %(message)s",
-            "%Y-%m-%d %H:%M:%S",
-        )
-    )
-    logging.getLogger().addHandler(_stdout_handler)
-    logger.info(f"Logging to console, {_log_path}, and run.log (via stdout)")
+    logger.info(f"Logging to console/run.log and {_log_path}")
 
     args = load_config(args_cli.config)
     logger.info(f"Config file: {args['environ']['config_file']}")

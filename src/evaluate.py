@@ -32,7 +32,7 @@ def infer(args, model, data_loader, details=False, device=None, details_path=Non
     try:
         model.eval()
         with torch.no_grad():
-            for data in tqdm(data_loader):
+            for data in tqdm(data_loader, file=sys.stderr):
                 images = data["image"].to(device)
                 labels = data["label"].to(device)
 
