@@ -421,6 +421,24 @@ simple_ai_autoresearch_setup --no-pull  # skip the ~5GB model download
 If setup reports CPU-only Ollama, switch to a CUDA 12.x T4 runtime (see
 caveats below) or use OpenRouter with `--remote`.
 
+### Background serving (run server in its own cell)
+
+`ollama serve` is long-running, so it must not block the notebook cell. Use the
+dedicated serve command, which starts the server **detached** and returns
+immediately; the training command then reuses the already-running server:
+
+```python
+# Cell 1 — returns at once; Ollama keeps serving in the background
+!simple_ai_autoresearch_serve
+
+# Cell 2 — training reuses the running server (no second spawn)
+!simple_ai_autoresearch_train --data-dir /content/dataset --runs 12
+```
+
+`--models-dir PATH` selects where Ollama stores models (e.g. a Google Drive
+mount) instead of the default `~/.ollama/models`. The server only starts the
+API — the model itself is pulled and loaded on demand by the training command.
+
 ### Examples
 
 ```bash

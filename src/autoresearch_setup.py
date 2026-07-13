@@ -133,8 +133,10 @@ def ensure_ollama_running() -> bool:
     logger.info("Starting Ollama server (ollama serve)...")
     subprocess.Popen(
         ["ollama", "serve"],
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        start_new_session=True,
     )
     for _ in range(60):
         if _ollama_reachable():

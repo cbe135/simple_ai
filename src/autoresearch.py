@@ -151,8 +151,10 @@ def start_ollama() -> None:
         )
     _ollama_proc = subprocess.Popen(
         ["ollama", "serve"],
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        start_new_session=True,
     )
     for _ in range(60):
         try:
