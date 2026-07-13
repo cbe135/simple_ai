@@ -112,6 +112,37 @@ def _deep_merge(base, override):
 
 
 def main():
+    import subprocess
+    import sys
+    import traceback
+
+    # Force line-buffered output so logs/errors are never hidden by piping.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+        sys.stderr.reconfigure(line_buffering=True)
+    except Exception:
+        pass
+
+    # Catch any uncaught exception and persist the traceback to disk,
+    # since `uv run` / Colab can swallow stderr and leave a silent death.
+    def _excepthook(exc_type, exc, tb):
+        msg = "".join(traceback.format_exception(exc_type, exc, tb))
+        print(msg, file=sys.stderr, flush=True)
+        try:
+            with open(os.path.join(os.getcwd(), "pipeline_errors.log"), "w") as _f:
+                _f.write(msg)
+        except Exception:
+            pass
+
+    sys.excepthook = _excepthook
+
+    # Print the running commit so we can confirm the deployed code is current.
+    try:
+        _commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+    except Exception:
+        _commit = "unknown"
+    print(f">>> pipeline starting — commit={_commit}", flush=True)
+
     parser = argparse.ArgumentParser(description="CNN Classification Pipeline")
     parser.add_argument(
         "--config",
@@ -146,6 +177,18 @@ def main():
         datefmt="%Y-%m-%d %H:%M:%S",
         force=True,
     )
+
+    # Also mirror all logs to a file so output survives even if the cell hides it.
+    _log_path = os.path.join(os.getcwd(), "pipeline.log")
+    _file_handler = logging.FileHandler(_log_path)
+    _file_handler.setFormatter(
+        logging.Formatter(
+            "[%(asctime)s.%(msecs)03d][%(levelname)5s](%(name)s) - %(message)s",
+            "%Y-%m-%d %H:%M:%S",
+        )
+    )
+    logging.getLogger().addHandler(_file_handler)
+    logger.info(f"Logging to console and {_log_path}")
 
     args = load_config(args_cli.config)
     logger.info(f"Config file: {args['environ']['config_file']}")

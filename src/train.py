@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import numpy as np
 import torch
 from tqdm.auto import tqdm
@@ -18,7 +19,7 @@ def train_one_epoch(args, model, criterion, optimizer, train_loader, val_loader)
     val_loss = 0.0
 
     model.train()
-    for data in train_loader:
+    for data in tqdm(train_loader, desc="train", file=sys.stdout):
         images = data["image"].to(device)
         labels = data["label"].to(device).float()
 
@@ -31,7 +32,7 @@ def train_one_epoch(args, model, criterion, optimizer, train_loader, val_loader)
 
     model.eval()
     with torch.no_grad():
-        for data in val_loader:
+        for data in tqdm(val_loader, desc="val", file=sys.stdout):
             images = data["image"].to(device)
             labels = data["label"].to(device).float()
 
