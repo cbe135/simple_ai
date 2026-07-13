@@ -42,8 +42,7 @@ def _ensure_linux_deps() -> None:
     logger.info("zstd missing; installing it (needed by the Ollama installer)...")
 
     if shutil.which("apt-get"):
-        cmd = ["apt-get", "update", "-qq", "&&", "apt-get", "install", "-y", "zstd"]
-        runner = ["bash", "-c", " && ".join(cmd)]
+        runner = ["bash", "-c", "apt-get update -qq && apt-get install -y zstd"]
     elif shutil.which("dnf"):
         runner = ["dnf", "install", "-y", "zstd"]
     elif shutil.which("pacman"):
