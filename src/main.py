@@ -148,8 +148,8 @@ def main():
     parser.add_argument(
         "--config",
         type=str,
-        default=None,
-        help="Path to config YAML file",
+        default="config.yaml",
+        help="Path to config YAML file (default: config.yaml)",
     )
     parser.add_argument(
         "--data-dir",

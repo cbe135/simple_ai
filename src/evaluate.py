@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import numpy as np
 import torch
 from tqdm.auto import tqdm
@@ -7,6 +8,7 @@ from sklearn.metrics import auc, confusion_matrix, roc_curve
 
 from .model import get_device
 from .transforms import build_val_transform
+from .utils import tqdm_disabled
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ def infer(args, model, data_loader, details=False, device=None, details_path=Non
     try:
         model.eval()
         with torch.no_grad():
-            for data in tqdm(data_loader, file=sys.stderr):
+            for data in tqdm(data_loader, file=sys.stderr, disable=tqdm_disabled()):
                 images = data["image"].to(device)
                 labels = data["label"].to(device)
 

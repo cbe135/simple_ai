@@ -83,8 +83,15 @@ def generate_dataset(args, datalist, transform):
     """Create a CacheDataset from a data list and transform pipeline."""
     from monai.data import CacheDataset
 
-    dataset = CacheDataset(
-        datalist, transform, cache_rate=args["data"]["cache_rate"]
+    cache_rate = args["data"]["cache_rate"]
+    logger.info(
+        "Creating CacheDataset (cache_rate=%s, num_items=%d)",
+        cache_rate, len(datalist),
+    )
+    dataset = CacheDataset(datalist, transform, cache_rate=cache_rate)
+    logger.info(
+        "CacheDataset ready (cache_rate=%s); items are cached on first load",
+        cache_rate,
     )
     return dataset
 

@@ -1,5 +1,13 @@
+import sys
+
 import matplotlib.pyplot as plt
 import numpy as np
+
+
+def tqdm_disabled():
+    """Disable progress bars unless stderr is a real TTY (e.g. a Colab
+    Terminal). Piped runs via `!uv run simple_ai_train` get no bars."""
+    return not sys.stderr.isatty()
 
 
 def plot_samples(samples, with_mask=False):

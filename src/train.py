@@ -8,6 +8,7 @@ from monai.utils.misc import set_determinism
 
 from .model import create_timm_model, generate_optimizer, get_device
 from .data import generate_dataloader
+from .utils import tqdm_disabled
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ def train_one_epoch(args, model, criterion, optimizer, train_loader, val_loader,
     val_loss = 0.0
 
     model.train()
-    for batch_idx, data in enumerate(tqdm(train_loader, desc="train", file=sys.stderr)):
+    for data in train_loader:
         images = data["image"].to(device)
         labels = data["label"].to(device).float()
 
@@ -30,27 +31,15 @@ def train_one_epoch(args, model, criterion, optimizer, train_loader, val_loader,
         optimizer.step()
         train_loss += loss.item()
 
-        if (batch_idx + 1) % 50 == 0:
-            logger.info(
-                "  train batch %d/%d — running loss: %.4f",
-                batch_idx + 1, len(train_loader), train_loss / (batch_idx + 1),
-            )
-
     model.eval()
     with torch.no_grad():
-        for batch_idx, data in enumerate(tqdm(val_loader, desc="val", file=sys.stderr)):
+        for data in val_loader:
             images = data["image"].to(device)
             labels = data["label"].to(device).float()
 
             preds = model(images)
             loss = criterion(preds, labels.reshape(preds.shape))
             val_loss += loss.item()
-
-        if (batch_idx + 1) % 50 == 0:
-            logger.info(
-                "  val batch %d/%d — running loss: %.4f",
-                batch_idx + 1, len(val_loader), val_loss / (batch_idx + 1),
-            )
 
     train_loss /= len(train_loader)
     val_loss /= len(val_loader)
@@ -70,7 +59,7 @@ def train(args, model, criterion, optimizer, train_loader, val_loader, run_dir=N
     record = {"train": [], "val": []}
     best_val_loss = np.inf
 
-    for epoch in tqdm(range(args["training"]["num_epoch"]), file=sys.stderr):
+    for epoch in tqdm(range(args["training"]["num_epoch"]), file=sys.stderr, disable=tqdm_disabled()):
         train_loss, val_loss = train_one_epoch(
             args, model, criterion, optimizer, train_loader, val_loader, device
         )
