@@ -169,6 +169,16 @@ def main():
             "Defaults to the current working directory."
         ),
     )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default=None,
+        choices=["cuda", "mps", "cpu"],
+        help=(
+            "Force a compute device. Default: auto-detect "
+            "(CUDA if available, else MPS on Apple Silicon, else CPU)."
+        ),
+    )
     args_cli = parser.parse_args()
 
     logging.basicConfig(
@@ -298,7 +308,7 @@ def main():
     from src.train import train_pipeline
 
     model, train_loader, val_loader, record = train_pipeline(
-        args, train_set, val_set, run_dir
+        args, train_set, val_set, run_dir, device=args_cli.device
     )
 
     # Plot loss curves
@@ -318,13 +328,13 @@ def main():
     best_state = torch.load(best_weights, weights_only=True)
     model.load_state_dict(best_state)
 
-    train_true, train_pred = infer(args, model, train_loader, True)
-    val_true, val_pred = infer(args, model, val_loader, True)
+    train_true, train_pred = infer(args, model, train_loader, True, device=args_cli.device)
+    val_true, val_pred = infer(args, model, val_loader, True, device=args_cli.device)
 
     from src.data import generate_dataloader
 
-    test_loader = generate_dataloader(args, test_set)
-    test_true, test_pred = infer(args, model, test_loader, True)
+    test_loader = generate_dataloader(args, test_set, device=args_cli.device)
+    test_true, test_pred = infer(args, model, test_loader, True, device=args_cli.device)
 
     plot_roc_and_show_result(
         args, train_true, train_pred, title="Train",

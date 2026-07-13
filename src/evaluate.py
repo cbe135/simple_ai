@@ -11,9 +11,10 @@ from .transforms import build_val_transform
 logger = logging.getLogger(__name__)
 
 
-def infer(args, model, data_loader, details=False):
+def infer(args, model, data_loader, details=False, device=None):
     """Run inference and return true labels and predictions."""
-    device = get_device()
+    device = device or get_device()
+    logger.info("Using device for inference: %s", device)
     sigmoid = torch.nn.Sigmoid()
     thres = args["threshold"]
 

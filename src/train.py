@@ -12,9 +12,9 @@ from .data import generate_dataloader
 logger = logging.getLogger(__name__)
 
 
-def train_one_epoch(args, model, criterion, optimizer, train_loader, val_loader):
+def train_one_epoch(args, model, criterion, optimizer, train_loader, val_loader, device=None):
     """Train for one epoch and return train/val loss."""
-    device = get_device()
+    device = device or get_device()
     train_loss = 0.0
     val_loss = 0.0
 
@@ -46,7 +46,7 @@ def train_one_epoch(args, model, criterion, optimizer, train_loader, val_loader)
     return train_loss, val_loss
 
 
-def train(args, model, criterion, optimizer, train_loader, val_loader, run_dir=None):
+def train(args, model, criterion, optimizer, train_loader, val_loader, run_dir=None, device=None):
     """Full training loop. Saves best weights and returns loss record."""
     if run_dir is None:
         from src.env_setup import default_data_dir
@@ -60,7 +60,7 @@ def train(args, model, criterion, optimizer, train_loader, val_loader, run_dir=N
 
     for epoch in tqdm(range(args["training"]["num_epoch"])):
         train_loss, val_loss = train_one_epoch(
-            args, model, criterion, optimizer, train_loader, val_loader
+            args, model, criterion, optimizer, train_loader, val_loader, device
         )
 
         if val_loss < best_val_loss:
@@ -80,15 +80,24 @@ def train(args, model, criterion, optimizer, train_loader, val_loader, run_dir=N
     return record
 
 
-def train_pipeline(args, train_set, val_set, run_dir=None):
+def train_pipeline(args, train_set, val_set, run_dir=None, device=None):
     """Complete training pipeline: create model, train, return results."""
     set_determinism(args["environ"]["seed"])
 
-    device = get_device()
+    device = device or get_device()
+    if device == "cuda":
+        # Small conv models benefit from autotuning kernel selection.
+        torch.backends.cudnn.benchmark = True
+    if device == "cuda":
+        dev_name = torch.cuda.get_device_name(0)
+    else:
+        dev_name = device
+    logger.info("Using device: %s — %s", device, dev_name)
+
     model = create_timm_model(args).to(device)
 
-    train_loader = generate_dataloader(args, train_set, shuffle=True)
-    val_loader = generate_dataloader(args, val_set)
+    train_loader = generate_dataloader(args, train_set, shuffle=True, device=device)
+    val_loader = generate_dataloader(args, val_set, device=device)
 
     criterion = torch.nn.BCEWithLogitsLoss()
     optimizer = generate_optimizer(args, model)
