@@ -49,6 +49,50 @@ def derive_has_masks(data_dicts_sample):
     return "mask" in data_dicts_sample[0]
 
 
+def _adjust_spatial_size(spatial_size, spatial_dims):
+    """Pad/truncate a spatial_size list to match the data's spatial rank.
+
+    Short lists are padded by repeating the first element (keeps it roughly
+    isotropic); long lists are truncated to the leading axes.
+    """
+    ss = list(spatial_size)
+    if len(ss) == spatial_dims:
+        return ss
+    if len(ss) < spatial_dims:
+        return ss + [ss[0]] * (spatial_dims - len(ss))
+    return ss[:spatial_dims]
+
+
+def _adjust_affine_range(rng, spatial_dims):
+    """Pad/truncate a per-axis affine range to match the spatial rank.
+
+    Missing axes are padded with [0, 0] (a no-op for that axis).
+    """
+    rng = list(rng)
+    if len(rng) >= spatial_dims:
+        return rng[:spatial_dims]
+    return rng + [[0, 0]] * (spatial_dims - len(rng))
+
+
+def derive_spatial_dims(data_dicts_sample):
+    """Load the first image and return its spatial rank (2 or 3).
+
+    Works for both 2D and 3D NIfTI, PIL, and DICOM inputs — the file
+    extension alone cannot distinguish a 2D from a 3D volume, so we read the
+    actual tensor shape instead.
+    """
+    from monai.transforms import LoadImaged
+
+    if not data_dicts_sample:
+        return 2
+    reader_kw = derive_reader(data_dicts_sample)
+    img_path = str(data_dicts_sample[0].get("image", ""))
+    x = LoadImaged(keys="image", ensure_channel_first=True, **reader_kw)(
+        {"image": img_path}
+    )["image"]
+    return x.ndim - 1
+
+
 def get_loaders(data_dicts_sample):
     """Build loader transforms by deriving keys and reader from the data."""
     has_masks = derive_has_masks(data_dicts_sample)
@@ -68,15 +112,19 @@ def get_preprocess(args, data_dicts_sample, dataset_info):
     """Build preprocessing pipeline based on modality and data characteristics."""
     modality = dataset_info.get("modality", "")
     has_masks = derive_has_masks(data_dicts_sample)
+    mod = modality.lower()
+
+    spatial_dims = dataset_info.get("spatial_dims") or len(args["data"]["spatial_size"])
+    spatial_size = _adjust_spatial_size(args["data"]["spatial_size"], spatial_dims)
 
     steps = []
 
-    if modality == "CT":
+    if mod == "ct":
         # CT: resize → window → mask → repeat
         keys = ["image"]
         if has_masks:
             keys.append("mask")
-        steps.append(Resized(keys=keys, spatial_size=args["data"]["spatial_size"]))
+        steps.append(Resized(keys=keys, spatial_size=spatial_size))
         steps.append(
             ScaleIntensityRanged(
                 keys=["image"],
@@ -90,27 +138,39 @@ def get_preprocess(args, data_dicts_sample, dataset_info):
         if has_masks:
             steps.append(MaskIntensityd(keys="image", mask_key="mask"))
     else:
-        # Non-CT (X-ray, MRI, etc.): resize only
+        # Non-CT (xray, mri, color, ...): resize only
         steps.append(
-            Resized(keys=["image"], spatial_size=args["data"]["spatial_size"])
+            Resized(keys=["image"], spatial_size=spatial_size)
         )
 
-    steps.append(
-        RepeatChanneld(keys=["image"], repeats=args["data"]["repeats"])
-    )
+    # Single-channel images are repeated to build a multi-channel input.
+    # Multi-channel images (e.g. RGB "color") already have their channels,
+    # so we skip the repeat.
+    if mod != "color":
+        steps.append(
+            RepeatChanneld(keys=["image"], repeats=args["data"]["repeats"])
+        )
 
     return steps
 
 
 def get_augmentation(args, dataset_info):
     """Build augmentation pipeline. Modality-agnostic, driven by args."""
+    spatial_dims = dataset_info.get("spatial_dims") or len(args["data"]["rotate_range"])
+    rotate_range = _adjust_affine_range(args["data"]["rotate_range"], spatial_dims)
+    shear_range = _adjust_affine_range(args["data"]["shear_range"], spatial_dims)
+    translate_range = _adjust_affine_range(args["data"]["translate_range"], spatial_dims)
+    scale_range = _adjust_affine_range(args["data"]["scale_range"], spatial_dims)
+    cfg_axis = args["data"].get("spatial_axis") or []
+    spatial_axis = cfg_axis if len(cfg_axis) == spatial_dims else list(range(spatial_dims))
+
     aug = [
         RandAffined(
             keys="image",
-            rotate_range=args["data"]["rotate_range"],
-            shear_range=args["data"]["shear_range"],
-            translate_range=args["data"]["translate_range"],
-            scale_range=args["data"]["scale_range"],
+            rotate_range=rotate_range,
+            shear_range=shear_range,
+            translate_range=translate_range,
+            scale_range=scale_range,
             prob=args["data"]["affine_prob"],
             padding_mode="border",
         ),
@@ -120,7 +180,7 @@ def get_augmentation(args, dataset_info):
     aug.append(
         RandFlipd(
             keys="image",
-            spatial_axis=args["data"]["spatial_axis"],
+            spatial_axis=spatial_axis,
             prob=args["data"]["flip_prob"],
         )
     )

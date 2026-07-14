@@ -166,7 +166,7 @@ def main():
         type=str,
         default=None,
         help=(
-            "Override the modality (CT | X-ray | MRI | ...). Defaults to the "
+            "Override the modality (ct | mri | xray | color). Defaults to the "
             "top-level `modality` key in the data list."
         ),
     )
@@ -276,15 +276,18 @@ def main():
     modality, data_dicts = load_modality_and_data(data_dir)
     if args_cli.modality:
         modality = args_cli.modality
-    dataset_info = {"modality": modality}
-    logger.info(f"Total data: {len(data_dicts)}")
-    logger.info(f"Modality: {modality}")
 
     # Derive properties from data
-    from src.transforms import derive_has_masks, derive_reader
+    from src.transforms import derive_has_masks, derive_reader, derive_spatial_dims
 
     has_masks = derive_has_masks(data_dicts)
     reader_kw = derive_reader(data_dicts)
+    spatial_dims = derive_spatial_dims(data_dicts[:1])
+    dataset_info = {"modality": modality, "spatial_dims": spatial_dims}
+    logger.info(f"Total data: {len(data_dicts)}")
+    logger.info(f"Modality: {modality}")
+    logger.info(f"Spatial dims: {spatial_dims}")
+
     logger.info(f"Has masks: {has_masks}")
     logger.info(f"Reader: {reader_kw or 'monai default'}")
 
