@@ -3,8 +3,8 @@ Standalone data preparation: download (via gdown) and extract a dataset into
 a data directory. Run this ONCE before ``python src/main.py --data-dir <dir>``.
 
 The pipeline (``src/main.py``) never downloads data; it expects the target
-directory to already contain ``data_list.yaml`` (or ``data_list.json``) and
-``dataset_info.yaml``.
+directory to already contain ``data_list.yaml`` (or ``data_list.json``) with a
+top-level ``modality`` key and a ``data`` list of per-patient dicts.
 
 Idempotent: if a data list already exists in ``--data-dir``, nothing is done.
 

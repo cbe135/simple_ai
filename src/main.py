@@ -3,12 +3,12 @@ CNN Classification Pipeline
 
 Entry point for end-to-end training. All behavior is driven by:
   - config YAML (data source, hyperparameters)
-  - dataset_info.yaml in the data directory (modality)
+  - data_list.yaml (top-level `modality` key + `data` list of per-patient dicts)
   - data_list.yaml structure (has_masks, image format)
 
 Usage:
-    python src/main.py
-    python src/main.py --config config.yaml
+    python src/main.py --data-dir /content/dataset
+    python src/main.py --config config.yaml --data-dir /content/dataset
 """
 print(">>> booting pipeline...", flush=True)
 
@@ -157,8 +157,17 @@ def main():
         type=str,
         required=True,
         help=(
-            "Directory containing data_list.yaml (or data_list.json) and "
-            "dataset_info.yaml, e.g. /content/liver_data. Required."
+            "Directory containing data_list.yaml (or data_list.json) with a "
+            "top-level `modality` key, e.g. /content/liver_data. Required."
+        ),
+    )
+    parser.add_argument(
+        "--modality",
+        type=str,
+        default=None,
+        help=(
+            "Override the modality (CT | X-ray | MRI | ...). Defaults to the "
+            "top-level `modality` key in the data list."
         ),
     )
     parser.add_argument(
@@ -260,16 +269,15 @@ def main():
     data_dir = find_data_dir(args, data_dir)
     logger.info(f"Resolved data directory: {data_dir}")
 
-    # Load data list
-    with open(path.join(data_dir, "data_list.yaml"), "r") as fp:
-        data_dicts = safe_load(fp)["data"]
+    # Load data list + modality (modality is a required top-level key; the
+    # --modality CLI flag overrides it).
+    from src.data import load_modality_and_data
+
+    modality, data_dicts = load_modality_and_data(data_dir)
+    if args_cli.modality:
+        modality = args_cli.modality
+    dataset_info = {"modality": modality}
     logger.info(f"Total data: {len(data_dicts)}")
-
-    # Load dataset_info.yaml (modality, etc.)
-    from src.transforms import load_dataset_info
-
-    dataset_info = load_dataset_info(data_dir)
-    modality = dataset_info.get("modality", "unknown")
     logger.info(f"Modality: {modality}")
 
     # Derive properties from data
@@ -298,6 +306,20 @@ def main():
     train_set = generate_dataset(args, train_dicts, train_transform)
     val_set = generate_dataset(args, val_dicts, val_transform)
     test_set = generate_dataset(args, test_dicts, val_transform)
+
+    # Save pre/post transformation sample images to run_dir/samples/
+    samples_dir = path.join(run_dir, "samples")
+    makedirs(samples_dir, exist_ok=True)
+    n_samples = min(4, len(data_dicts))
+    for _i in range(n_samples):
+        _s = data_dicts[_i]
+        _pre = val_transform(_s)
+        _post = train_transform(_s)
+        plot_transform_result(
+            _pre, _post, with_mask=has_masks,
+            save_path=path.join(samples_dir, f"sample_{_i}.png"),
+        )
+    logger.info("Saved %d pre/post transformation samples to %s", n_samples, samples_dir)
 
     # ── Data summary (mirrors the D4 notebook diagnostics) ──────────────────
     # Label distribution per split, counted from the dicts (no image loading).
@@ -331,7 +353,7 @@ def main():
     )
 
     # Plot loss curves
-    from src.utils import plot_loss_curves
+    from src.utils import plot_loss_curves, plot_transform_result
 
     plot_loss_curves(args, record, save_path=path.join(run_dir, "loss_curve.png"))
 
@@ -347,13 +369,18 @@ def main():
     best_state = torch.load(best_weights, weights_only=True)
     model.load_state_dict(best_state)
 
+    inference_dir = path.join(run_dir, "inference")
+    roc_dir = path.join(run_dir, "roc")
+    makedirs(inference_dir, exist_ok=True)
+    makedirs(roc_dir, exist_ok=True)
+
     train_true, train_pred = infer(
         args, model, train_loader, True, device=args_cli.device,
-        details_path=path.join(run_dir, "inference_details_train.log"),
+        details_path=path.join(inference_dir, "inference_details_train.log"),
     )
     val_true, val_pred = infer(
         args, model, val_loader, True, device=args_cli.device,
-        details_path=path.join(run_dir, "inference_details_validation.log"),
+        details_path=path.join(inference_dir, "inference_details_validation.log"),
     )
 
     from src.data import generate_dataloader
@@ -361,27 +388,28 @@ def main():
     test_loader = generate_dataloader(args, test_set, device=args_cli.device)
     test_true, test_pred = infer(
         args, model, test_loader, True, device=args_cli.device,
-        details_path=path.join(run_dir, "inference_details_test.log"),
+        details_path=path.join(inference_dir, "inference_details_test.log"),
     )
 
     plot_roc_and_show_result(
         args, train_true, train_pred, title="Train",
-        save_path=path.join(run_dir, "roc_train.png"),
+        save_path=path.join(roc_dir, "roc_train.png"),
     )
     plot_roc_and_show_result(
         args, val_true, val_pred, title="Validation",
-        save_path=path.join(run_dir, "roc_validation.png"),
+        save_path=path.join(roc_dir, "roc_validation.png"),
     )
     plot_roc_and_show_result(
         args, test_true, test_pred, title="Test",
-        save_path=path.join(run_dir, "roc_test.png"),
+        save_path=path.join(roc_dir, "roc_test.png"),
     )
 
     logger.info(
-        f"Artifacts saved in {run_dir}: best_weights.pth, loss_curve.png, "
-        f"roc_train.png, roc_validation.png, roc_test.png, "
-        f"inference_details_train.log, inference_details_validation.log, "
-        f"inference_details_test.log"
+        f"Artifacts saved in {run_dir}:\n"
+        f"  best_weights.pth, loss_curve.png, config.yaml\n"
+        f"  samples/  (pre/post transformation sample images)\n"
+        f"  inference/  (inference_details_train|validation|test.log)\n"
+        f"  roc/  (roc_train|validation|test.png)"
     )
     logger.info("Pipeline complete!")
 

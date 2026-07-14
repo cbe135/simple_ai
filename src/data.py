@@ -37,6 +37,44 @@ def load_data_list(args, data_dir=None):
     )
 
 
+def load_modality_and_data(data_dir):
+    """Load the top-level ``modality`` key and the ``data`` list.
+
+    The modality used to be read from a separate ``dataset_info.yaml``; it is
+    now a required top-level key of ``data_list.yaml`` / ``data_list.json``.
+
+    Returns ``(modality, data_dicts)``.
+    """
+    yaml_path = os.path.join(data_dir, "data_list.yaml")
+    json_path = os.path.join(data_dir, "data_list.json")
+
+    if os.path.exists(yaml_path):
+        with open(yaml_path, "r") as fp:
+            raw = yaml.safe_load(fp)
+    elif os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as fp:
+            raw = json.load(fp)
+    else:
+        raise FileNotFoundError(
+            f"No data list found in {data_dir} (expected data_list.yaml or data_list.json)"
+        )
+
+    modality = (raw or {}).get("modality")
+    if not modality:
+        raise SystemExit(
+            "Missing required top-level 'modality' key in the data list "
+            f"({yaml_path if os.path.exists(yaml_path) else json_path}). "
+            "Add e.g. `modality: CT` at the top level (the separate "
+            "dataset_info.yaml file is no longer used)."
+        )
+
+    data_dicts = (raw or {}).get("data")
+    if not isinstance(data_dicts, list):
+        raise SystemExit("The data list must contain a top-level 'data' list of dicts.")
+
+    return modality, data_dicts
+
+
 def populate_data_lists(args, data_dicts):
     """Split data into training, validation, and testing sets."""
     labels = [a["label"] for a in data_dicts]

@@ -2,7 +2,7 @@
 Data-driven transforms. No hardcoded task names.
 
 Transform pipelines are built from:
-  - dataset_info.yaml (modality)
+  - data_list.yaml (top-level `modality` key)
   - data_list.yaml structure (has_masks, reader)
   - args (hyperparameters like spatial_size, a_min/a_max, repeats)
 """
@@ -19,21 +19,6 @@ from monai.transforms import (
     Resized,
     ScaleIntensityRanged,
 )
-
-
-def load_dataset_info(data_dir):
-    """Load dataset_info.yaml from the data directory.
-
-    Returns a dict with at least:
-        modality: CT | X-ray | MRI | ...
-    """
-    import yaml
-
-    info_path = os.path.join(data_dir, "dataset_info.yaml")
-    if os.path.exists(info_path):
-        with open(info_path, "r") as fp:
-            return yaml.safe_load(fp)
-    return {}
 
 
 def derive_reader(data_dicts_sample):

@@ -10,9 +10,9 @@ def tqdm_disabled():
     return not sys.stderr.isatty()
 
 
-def plot_samples(samples, with_mask=False):
-    """Plot sample images with optional masks."""
-    for data in samples:
+def plot_samples(samples, with_mask=False, save_path=None):
+    """Plot sample images with optional masks. Saves to ``save_path`` if given."""
+    for idx, data in enumerate(samples):
         column_cnt = 2 if with_mask else 1
         image = data["image"][0]
         mask = data["mask"][0]
@@ -29,11 +29,18 @@ def plot_samples(samples, with_mask=False):
             axs.imshow(image, cmap="gray")
             axs.set_title(image_title)
 
+        if save_path:
+            fig.savefig(save_path if len(samples) == 1 else f"{save_path}.{idx}")
         plt.show()
 
 
-def plot_transform_result(data, trans_data, with_mask=False, with_histogram=False):
-    """Plot original vs transformed data with optional mask or histogram."""
+def plot_transform_result(
+    data, trans_data, with_mask=False, with_histogram=False, save_path=None
+):
+    """Plot original vs transformed data with optional mask or histogram.
+
+    Saves to ``save_path`` (a PNG) when provided.
+    """
     assert not (with_mask and with_histogram), "Cannot plot both histogram and mask"
 
     if with_mask or with_histogram:
@@ -63,6 +70,8 @@ def plot_transform_result(data, trans_data, with_mask=False, with_histogram=Fals
         trans_counts, trans_bins = np.histogram(trans_data["image"][0], bins=256)
         axs[3].hist(trans_bins[:-1], bins=256, weights=trans_counts, log=True)
 
+    if save_path:
+        fig.savefig(save_path)
     plt.show()
 
 

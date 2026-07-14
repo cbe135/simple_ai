@@ -6,7 +6,7 @@ The pipeline itself never downloads or extracts data. Data preparation
 a standalone script the user runs once before ``main.py``.
 
 The data directory passed to ``--data-dir`` must contain ``data_list.yaml``
-(or ``data_list.json``) and ``dataset_info.yaml``.
+(or ``data_list.json``) with a top-level ``modality`` key and a ``data`` list.
 """
 import os
 import logging
