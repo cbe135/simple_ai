@@ -2,82 +2,72 @@
 
 ## 5-1. 前處理步驟說明
 
-我們需要載入資料並進行前處理：
+前處理由 `src/transforms.py` 自動推導，不需要手寫 `if modality == ...`。
+核心函式如下：
 
-1. 把資料整理成模型需要的格式
-2. 去除沒有用的雜訊
+| 函式 | 作用 |
+|---|---|
+| `derive_reader(data_dicts_sample)` | 由第一個影像副檔名決定讀取器（`.nii.gz` → NIfTI，`jpg/png` → PIL） |
+| `derive_has_masks(data_dicts_sample)` | 由資料中是否含 `mask` 鍵決定是否啟用 mask |
+| `get_loaders(data_dicts_sample)` | 產生 `LoadImaged` / `EnsureTyped` + 可選 `LoadImaged(mask)` |
+| `get_preprocess(args, data_dicts_sample, dataset_info)` | 依 `modality` 產生前處理（`ct` → `ScaleIntensityRanged` 窗位 + 可選 `MaskIntensityd` + `Resized` + `RepeatChanneld`；`mri` / `xray` → `Resized` + `RepeatChanneld`；`color` → `Resized` 不含 `RepeatChanneld`） |
+| `get_augmentation(args, dataset_info)` | 產生增強 transform（見 06） |
+| `build_train_transform(args, data_dicts_sample, dataset_info)` | `loaders + preprocess + augmentation + 額外` 組成訓練 transform |
+| `build_val_transform(args, data_dicts_sample, dataset_info)` | `loaders + preprocess + 額外`（**不含**增強）組成驗證 transform |
 
-以下是會使用到的前處理步驟：
+其中 `dataset_info` 是一個 dict：`{"modality": "ct", "spatial_dims": 2}`（大小寫不敏感），
+由 `data.py` 的 `load_modality_and_data` 讀取 `data_list.yaml` 頂層 `modality` 得到；
+`spatial_dims` 則由 `transforms.derive_spatial_dims` **載入第一張影像後依其形狀自動判斷**
+（`.nii.gz` 既可能是 2D 也可能是 3D，無法只看副檔名）。
 
-- **調整大小**：調整圖像到特定大小。模型接受的影像大小是 (250, 250)。
-- **開窗**：調整影像的亮度和對比。這前處理只適合 CT。可調整窗寬和窗位。
-- **資料正規化**：將每一個像素的值調整到 0 跟 1 之間。
-- **去背**：將肝臟外的背景設為 0。
+> `spatial_size` 與各 affine 範圍（`rotate_range` / `shear_range` /
+> `translate_range` / `scale_range`）都會**自動補齊 / 截斷**到偵測到的維度：
+> 2D 設定遇到 3D 資料時，`spatial_size` 補成三等邊（如 `[250,250,250]`），
+> affine 範圍在新軸上補 `[0, 0]`（該軸不做增強）。
 
-## 5-2. 示範：調整大小
+## 5-2. CT 的窗寬窗位
 
-```python
-from src.utils import plot_transform_result
-from monai.transforms import Resized
-
-data = load(data_dicts[30])
-print(data['image'].size(), data['mask'].size())
-
-resizer = Resized(keys=['image', 'mask'], spatial_size=args["data"]["spatial_size"])
-resized_data = resizer(data)
-
-plot_transform_result(data, resized_data, with_mask=True)
-```
-
-## 5-3. 示範：正規化
-
-```python
-from monai.transforms import ScaleIntensityd
-
-normalizer = ScaleIntensityd(keys='image', minv=0.0, maxv=1.0)
-normalized_data = normalizer(data)
-
-plot_transform_result(data, normalized_data, with_histogram=True)
-```
-
-## 5-4. 示範：開窗
+CT 的 HU 值範圍很大，先用 `ScaleIntensityRanged`
+（參數 `a_min` / `a_max`，預設 `-125` ~ `200`）把感興趣的範圍線性映射到
+`[0, 1]`，超過範圍的值會被 clip，這能強化肝臟腫瘤的對比。
 
 ```python
-from monai.transforms import ScaleIntensityRanged
-
-windower = ScaleIntensityRanged(
-    keys=['image'],
-    a_min=args["data"]['a_min'],
-    a_max=args["data"]['a_max'],
-    b_min=0, b_max=1,
-    clip=True
+from src.transforms import (
+    derive_reader, derive_has_masks, get_loaders,
+    get_preprocess, build_train_transform, build_val_transform,
 )
-windowed_data = windower(data)
-plot_transform_result(data, windowed_data, with_histogram=True)
+
+dataset_info = {"modality": modality}
+loaders = get_loaders(data_dicts[:1])
+preprocess = get_preprocess(args, data_dicts[:1], dataset_info)
+train_tf = build_train_transform(args, data_dicts[:1], dataset_info)
+val_tf   = build_val_transform(args, data_dicts[:1], dataset_info)
 ```
 
-## 5-5. 示範：去背
+## 5-3. 視覺化前 / 後處理結果
 
-```python
-from monai.transforms import MaskIntensityd
+`src/utils.py` 的 `plot_transform_result` 與 `plot_samples` 接受 `save_path`，
+`src/main.py` 會把每個訓練 / 驗證樣本的前處理前後對照圖，存到
+`run_dir/samples/` 資料夾：
 
-masker = MaskIntensityd(keys='image', mask_key='mask')
-masked_data = masker(data)
-
-plot_transform_result(data, masked_data, with_mask=True)
-plot_transform_result(data, masked_data, with_histogram=True)
+```
+runs/<timestamp>/
+└── samples/
+    ├── train_sample_0.png
+    ├── val_sample_0.png
+    └── ...
 ```
 
-## 5-6. 完整前處理管線
+```bash
+# 訓練時會自動產生，無需手動呼叫
+uv run simple_ai_train --data-dir /content/liver_data
+```
+
+## 5-4. 在程式中使用
 
 ```python
-from src.transforms import get_loaders, get_preprocess, get_augmentation
-from monai.transforms import Compose
+from src.data import generate_dataset
 
-loaders = get_loaders()
-preprocess = get_preprocess(args)
-augmentation = get_augmentation(args)
-
-train_transform = Compose(loaders + preprocess + augmentation)
-val_transform = Compose(loaders + preprocess)
+train_set = generate_dataset(args, args.data_list["train"], train_tf)
+val_set   = generate_dataset(args, args.data_list["val"],   val_tf)
 ```

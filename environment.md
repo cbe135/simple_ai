@@ -36,8 +36,12 @@ drive.mount('drive', force_remount=True)
 
 ### 5. 執行
 
+`--data-dir` 指向包含 `data_list.yaml` 的資料目錄（必填）：
+
 ```python
-!uv run python src/main.py
+!uv run simple_ai_train --data-dir /content/liver_data
+# 等同於：
+!uv run python src/main.py --config config.yaml --data-dir /content/liver_data
 ```
 
 ---
@@ -56,9 +60,13 @@ drive.mount('drive', force_remount=True)
 !uv sync
 ```
 
-### 3. 修改資料路徑
+### 3. 修改資料路徑並執行
 
-如果你的資料在 Kaggle Input 目錄，修改 `data_dir` 指向正確路徑。
+如果你的資料在 Kaggle Input 目錄，把該目錄傳給 `--data-dir` 即可（資料目錄需含 `data_list.yaml`）：
+
+```python
+!uv run simple_ai_train --data-dir /kaggle/input/<your-dataset>
+```
 
 ---
 
@@ -98,6 +106,10 @@ gdown "https://drive.google.com/uc?id=<your-gdown-file-id>" -O dataset.zip
 
 ### 4. 執行
 
+`--data-dir` 指向包含 `data_list.yaml` 的資料目錄（必填）：
+
 ```bash
-uv run python src/main.py
+uv run simple_ai_train --data-dir ./liver_data
+# 等同於：
+uv run python src/main.py --config config.yaml --data-dir ./liver_data
 ```

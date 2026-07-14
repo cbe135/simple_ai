@@ -2,31 +2,45 @@
 
 **2026 Winter — 最後修改日期：2025/12/17**
 
-## CNN Classification
+## 這個專案在做什麼
 
-**Dataset reference:** [Medical Segmentation Decathlon](http://medicaldecathlon.com/)
+本專案是一個**資料驅動**的醫學影像分類流程，使用 MONAI + PyTorch + timm 實作
+CNN 影像分類（二元 / 多類別皆可）。整個流程的所有行為都來自設定檔與資料本身，
+程式碼中**沒有任何寫死的任務名稱**（沒有 `if task == ...`）。
 
-本教程將帶領你使用 CNN（Convolutional Neural Network）對 CT 影像中的肝臟進行分類，判斷影像中的病人是否有肝腫瘤。
+學習目標：
 
-### 學習目標
+- 了解一條完整的深度學習訓練管線（資料 → 前處理 → 增強 → 訓練 → 評估）。
+- 學會用設定檔（`config.yaml`）控制超參數，而不用改程式碼。
+- 理解「資料驅動」的設計：前處理、讀取器、是否有 mask，全部由資料自動推導。
 
-- 了解醫學影像分類的基本流程
-- 學會使用 MONAI 進行資料前處理與增強
-- 使用 PyTorch + timm 建立 CNN 分類模型
-- 評估模型表現（ROC 曲線、混淆矩陣、Grad-CAM）
+## 工具鏈
 
-### 使用的工具與框架
+- **MONAI**：醫學影像的讀取與前處理。
+- **PyTorch / torchvision**：深度學習框架。
+- **timm**：現成模型（如 ResNet-18）。
+- **scikit-learn**：評估指標（ROC、AUC、混淆矩陣）。
+- **matplotlib**：視覺化。
+- **gdown**：從 Google Drive 下載資料。
+- **openai / python-dotenv**：autoresearch 用的 LLM 客戶端。
 
-| 工具 | 用途 |
-|------|------|
-| MONAI | 醫學影像前處理、資料載入 |
-| PyTorch | 深度學習框架 |
-| timm | 預訓練模型（ResNet-18） |
-| scikit-learn | 評估指標 |
+## 如何執行（指令列）
 
-### 環境需求
+本專案以模組化的指令列腳本執行，不需要手動在 notebook 裡一個 cell 一個 cell 呼叫：
 
-- Python >= 3.10
-- GPU 建議使用（Colab 的 T4 或更好的 GPU）
+```bash
+# 安裝相依（只需一次）
+uv sync
 
-> 下一節：[環境設定](environment.md)
+# 訓練（資料目錄必填）
+uv run simple_ai_train --data-dir /content/liver_data
+
+# 資料準備（從 Google Drive 下載並解壓，只需一次）
+uv run simple_ai_train_data --data-dir /content/liver_data --file-ids 1LNkF...
+
+# 自動搜尋更好的 config（本地 Ollama 或 OpenRouter）
+uv run simple_ai_autoresearch_train --data-dir /content/liver_data --runs 12
+```
+
+對應的程式碼模組都放在 `src/` 下（見 `README.md` 的 Project Structure），
+後續章節會依模組逐一說明。

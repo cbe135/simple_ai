@@ -2,74 +2,58 @@
 
 ## 6-1. 增強方式說明
 
-我們可以執行資料增強來增加資料的多樣性：
+增強由 `src/transforms.py` 的 `get_augmentation(args, dataset_info)` 產生，
+並只會出現在**訓練** transform（驗證 / 測試不增強）。設計上刻意**不使用 crop**，
+以保留影像完整資訊。
 
-- **旋轉**
-- **裁減**
-- **平移**
-- **放大縮小**
-- **翻轉**
+包含的 transform：
 
-更多 MONAI 增強方式請參考：[MONAI Transforms](https://docs.monai.io/en/stable/transforms.html)
-
-## 6-2. 隨機仿射變換
-
-```python
-from src.utils import plot_transform_result
-from monai.transforms import RandAffined
-
-affine = RandAffined(
-    keys='image',
-    rotate_range=args["data"]['rotate_range'],
-    shear_range=args["data"]['shear_range'],
-    translate_range=args["data"]['translate_range'],
-    scale_range=args["data"]['scale_range'],
-    prob=args["data"]['affine_prob'],
-    padding_mode='border'
-)
-
-affine_data = affine(data)
-plot_transform_result(data, affine_data)
-```
-
-## 6-3. 隨機翻轉
+- `RandAffined`：依 `args` 中的 `rotate_range` / `shear_range` /
+  `translate_range` / `scale_range` / `spatial_axis` 做隨機仿射，
+  觸發機率由 `affine_prob` 控制（預設 `0`，即關閉）。
+- `RandFlipd`：`flip_prob`（預設 `0.5`）做隨機水平翻轉。
+- `RandGaussianNoised`：**永遠**啟用，對影像加微小高斯雜訊，提升穩健性。
 
 ```python
-from monai.transforms import RandFlipd
+from src.transforms import get_augmentation, build_train_transform
 
-flipper = RandFlipd(keys='image', spatial_axis=args["data"]["spatial_axis"], prob=args["data"]["flip_prob"])
-flipped_data = flipper(data)
+aug = get_augmentation(args, {"modality": modality})
 
-plot_transform_result(data, flipped_data)
+# 訓練 transform = loaders + preprocess + augmentation + 額外
+train_tf = build_train_transform(args, data_dicts[:1], {"modality": modality})
+# 驗證 transform = loaders + preprocess + 額外（沒有 augmentation）
+val_tf   = build_val_transform(args, data_dicts[:1], {"modality": modality})
 ```
 
-## 6-4. 載入並設定資料
+## 6-2. 資料集與 DataLoader
+
+`src/data.py` 負責把 transform 套用到資料並建立 DataLoader：
+
+| 函式 | 作用 |
+|---|---|
+| `generate_dataset(args, datalist, transform)` | 建立 `Dataset` |
+| `generate_dataloader(args, dataset, shuffle, device)` | 建立 `DataLoader`（`batch_size` 來自 `args.batch_size`，預設 16） |
+| `check_dist(dataset)` | 檢查每類別樣本數是否為正數（避免空類別） |
 
 ```python
-from src.data import generate_dataset, generate_dataloader
-from src.transforms import build_train_transform, build_val_transform
+from src.data import generate_dataset, generate_dataloader, check_dist
 
-train_transform = build_train_transform(args)
-val_transform = build_val_transform(args)
-
-train_set = generate_dataset(args, train_dicts, train_transform)
-val_set = generate_dataset(args, val_dicts, val_transform)
-test_set = generate_dataset(args, test_dicts, val_transform)
+train_set = generate_dataset(args, args.data_list["train"], train_tf)
+check_dist(train_set)                       # 確認類別分布合理
+train_loader = generate_dataloader(args, train_set, shuffle=True, device=device)
 ```
 
-## 6-5. 檢視資料分佈
+## 6-3. 自訂增強（transforms 區塊）
 
-```python
-from src.data import check_dist
+若 preset 不夠，可在 `config.yaml` 的 `transforms.augmentation_extra` 用
+MONAI bundle 格式附加 transform：
 
-check_dist(train_set)
-check_dist(val_set)
-check_dist(test_set)
+```yaml
+transforms:
+  augmentation_extra:
+    - _target_: monai.transforms.RandGaussianSmoothd
+      keys: ["image"]
+      sigma_x: [0.5, 1.0]
 ```
 
-## 6-6. 檢視訓練集影像
-
-```python
-sample_data = [train_set[i] for i in random_idx]
-plot_samples(sample_data)
-```
+它會被附加在 preset 增強之後。更多欄位請見 `03-configuration.md`。
