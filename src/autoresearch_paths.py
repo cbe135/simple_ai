@@ -14,13 +14,28 @@ COLAB_MODELS_DIR = "/content/drive/MyDrive/ollama_models"
 
 
 def on_colab() -> bool:
-    """Return True if running inside a Google Colab kernel."""
+    """Return True if running inside a Google Colab environment.
+
+    Prefers importing ``google.colab`` (works from a Python notebook cell /
+    hosted kernel). Falls back to environment/filesystem markers so detection
+    also works from a ``!`` shell subprocess, where ``google.colab`` is NOT
+    importable but Colab still exposes ``COLAB_*`` env vars and ``/content``.
+    """
     try:
         import google.colab  # noqa: F401
 
         return True
     except Exception:
-        return False
+        pass
+    markers = (
+        "COLAB_GPU",
+        "COLAB_TPU_ADDR",
+        "COLAB_RELEASE_TAG",
+        "COLAB_NOTEBOOK_METADATA",
+    )
+    if any(v in os.environ for v in markers) or os.path.isdir("/content"):
+        return True
+    return False
 
 
 def _ensure_drive_mounted(drive_dir: str) -> None:
@@ -40,11 +55,13 @@ def _ensure_drive_mounted(drive_dir: str) -> None:
         drive.mount("/content/drive")
     except Exception as e:  # noqa: BLE001
         raise SystemExit(
-            "Google Drive is not mounted and could not be mounted automatically "
-            f"({e}). Mount it in a Python cell first:\n"
+            "Google Drive is not mounted and `!` commands cannot mount it "
+            f"(google.colab is not importable from a shell subprocess: {e}).\n"
+            "Mount Drive ONCE in a Python cell (not via !):\n"
             "    from google.colab import drive\n"
             "    drive.mount('/content/drive')\n"
-            "then re-run the command."
+            "then re-run the `!` command. (This is required for "
+            "simple_ai_autoresearch_save.)"
         )
 
 
@@ -66,14 +83,37 @@ def resolve_models_dir(models_dir_arg=None, colab_default: bool = True) -> str:
     return DEFAULT_MODELS_DIR
 
 
-def apply_models_dir(models_dir_arg=None, colab_default: bool = True) -> str:
+def apply_models_dir(
+    models_dir_arg=None, colab_default: bool = True, require_drive: bool = False
+) -> str:
     """Resolve, mount (if on Drive), create, and export ``OLLAMA_MODELS``.
 
     Returns the resolved path. Child ``ollama`` processes inherit the env var,
     so calling this before ``ollama serve`` / ``ollama pull`` is sufficient.
+
+    When the resolved path lives under ``/content/drive`` but Drive is not
+    mounted:
+      - if ``require_drive`` is True (e.g. ``save``), attempt to mount and
+        hard-fail with a clear message if that's not possible;
+      - otherwise (``setup`` / ``train`` / ``serve``), warn and fall back to
+        ``DEFAULT_MODELS_DIR`` so the command still runs (weights just won't
+        persist across Colab restarts).
     """
     models_dir = resolve_models_dir(models_dir_arg, colab_default=colab_default)
-    _ensure_drive_mounted(models_dir)
+    if models_dir.startswith("/content/drive") and not os.path.ismount("/content/drive"):
+        if require_drive:
+            _ensure_drive_mounted(models_dir)
+        else:
+            logger.warning(
+                "Google Drive is not mounted, so the auto-default Ollama store "
+                "(%s) can't be used. Falling back to %s for this session — weights "
+                "will NOT persist across Colab restarts. Mount Drive in a Python "
+                "cell (`from google.colab import drive; drive.mount('/content/drive')`) "
+                "and re-run to persist.",
+                models_dir,
+                DEFAULT_MODELS_DIR,
+            )
+            models_dir = DEFAULT_MODELS_DIR
     os.makedirs(models_dir, exist_ok=True)
     os.environ["OLLAMA_MODELS"] = models_dir
     return models_dir

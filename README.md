@@ -483,7 +483,23 @@ A Colab runtime's local disk is wiped on disconnect, so the multi-GB model
 re-downloads every session. All three autoresearch commands auto-point Ollama's
 store at a Google Drive folder **when run on Colab** (default
 `/content/drive/MyDrive/ollama_models`; also settable via `$OLLAMA_MODELS` or the
-shared `--models-dir` flag). On first run Drive is mounted automatically.
+shared `--models-dir` flag).
+
+**On Colab, mount Drive once in a Python cell first** (a `!` command cannot mount
+Drive itself, because `google.colab` is not importable from a shell subprocess):
+
+```python
+from google.colab import drive
+drive.mount('/content/drive')
+```
+
+Then run the `!uv run ...` commands — they auto-detect Colab (via the `COLAB_GPU`
+env var / `/content`) and use the Drive store. If Drive is **not** mounted:
+- `simple_ai_autoresearch_save` **hard-fails** with a message telling you to mount
+  in a Python cell (it exists to persist weights).
+- `simple_ai_autoresearch_setup` / `train` / `serve` **warn and fall back** to
+  `~/.ollama/models` for that session, so they still run — but weights won't
+  persist across Colab restarts.
 
 Two equivalent flows:
 
