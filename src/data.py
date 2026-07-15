@@ -44,6 +44,22 @@ def load_data_list(args, data_dir=None):
             "The data list must contain a non-empty top-level 'data' list of dicts."
         )
 
+    # Anchor relative image/mask paths to data_dir so LoadImaged resolves them
+    # against the data directory rather than the process CWD.
+    _PATH_KEYS = ("image", "mask")
+    for d in data_dicts:
+        for k in _PATH_KEYS:
+            v = d.get(k)
+            if v is None:
+                continue
+            if isinstance(v, str):
+                if not os.path.isabs(v):
+                    d[k] = os.path.join(data_dir, v)
+            elif isinstance(v, (list, tuple)):
+                d[k] = [
+                    p if os.path.isabs(p) else os.path.join(data_dir, p)
+                    for p in v
+                ]
     return data_dicts
 
 
