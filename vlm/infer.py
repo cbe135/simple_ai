@@ -75,20 +75,20 @@ def infer_hf(cfg, data_dir, split, adapter, base_dir, device, quantize, run_dir)
                 out = model.generate(**inputs, max_new_tokens=16, do_sample=False,
                                      output_scores=True, return_dict_in_generate=True)
                 sequences = out.sequences
-                scores = out.scores
+                gen_scores = out.scores
             else:
                 out = model.generate(**inputs, max_new_tokens=16, do_sample=False)
                 sequences = out
-                scores = None
+                gen_scores = None
 
         gen = sequences[0][inputs["input_ids"].shape[1]:]
         text = tokenizer.decode(gen, skip_special_tokens=True).strip()
         pred = parse_prediction(text, label_map)
 
         score = None
-        if scores is not None:
+        if gen_scores is not None:
             try:
-                logits = scores[0][0]
+                logits = gen_scores[0][0]
                 psy = float(torch.softmax(logits.float(), dim=-1)[yes_id])
                 pno = float(torch.softmax(logits.float(), dim=-1)[no_id])
                 score = psy / (psy + pno + 1e-9)
