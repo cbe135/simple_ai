@@ -311,10 +311,12 @@ def ollama_warmup(client, model: str) -> None:
 # --------------------------------------------------------------------------- #
 # Training subprocess + git helpers
 # --------------------------------------------------------------------------- #
-def run_training(repo_root: Path, config_name: str, data_dir, timeout: int):
+def run_training(repo_root: Path, config_name: str, data_dir, modality, timeout: int):
     cmd = ["uv", "run", "python", "src/main.py", "--config", config_name]
     if data_dir:
         cmd += ["--data-dir", str(data_dir)]
+    if modality:
+        cmd += ["--modality", str(modality)]
     logger.info("Running training: %s", " ".join(cmd))
     try:
         proc = subprocess.run(
@@ -400,6 +402,7 @@ def run(args: dict) -> None:
     repo_root = Path(args.get("repo_root") or os.getcwd()).resolve()
     config_path = (repo_root / (args.get("config") or "config.yaml")).resolve()
     data_dir = args.get("data_dir")
+    modality = args.get("modality")
     experiments_path = (repo_root / (args.get("experiments") or "experiments.tsv")).resolve()
     timeout = int(args.get("timeout", 700))
     num_runs = int(args.get("runs", 10))
@@ -485,7 +488,7 @@ def run(args: dict) -> None:
             if local and unload:
                 ollama_unload(model)
 
-            val_loss, terr = run_training(repo_root, config_path.name, data_dir, timeout)
+            val_loss, terr = run_training(repo_root, config_path.name, data_dir, modality, timeout)
             if terr or val_loss is None:
                 status = "ERROR"
                 notes = terr or "no validation loss reported"

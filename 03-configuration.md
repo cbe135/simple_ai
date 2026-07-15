@@ -3,10 +3,10 @@
 我們使用一個 YAML 設定檔（預設 `config.yaml`）來管理所有參數，傳入各模組的
 `args`。參數分為幾個主要區塊：`environ`、`data`、`training`、`threshold`、`transforms`。
 
-> **重要**：`modality`（`ct` / `mri` / `xray` / `color`，大小寫不敏感）**不是**寫在 `config.yaml` 裡，
-> 而是寫在資料目錄下的 `data_list.yaml` 頂層 `modality` 欄位。
+> **重要**：`modality`（`ct` / `mri` / `xray` / `color`）**不是**寫在 `config.yaml` 裡，
+> 也不再寫在 `data_list.yaml` 裡，而是在訓練時用 `--modality` 參數傳入。
 > 前處理（CT → 窗寬窗位 + mask + resize；X-ray → 只 resize）由此自動決定。
-> 這就是「資料驅動」的核心：改變 `data_list.yaml` 的 `modality`，行為就跟著變，
+> 這就是「資料驅動」的核心：改變 `--modality`，行為就跟著變，
 > 不需要改任何程式碼。
 
 ## config.yaml 結構

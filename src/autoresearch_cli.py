@@ -30,6 +30,12 @@ def main(argv=None):
         description="Autonomously improve classification training by editing config.yaml.",
     )
     parser.add_argument("--data-dir", default=None, help="Dataset directory for training.")
+    parser.add_argument(
+        "--modality",
+        required=True,
+        choices=["ct", "mri", "xray", "color"],
+        help="Imaging modality (ct | mri | xray | color); passed through to training.",
+    )
     parser.add_argument("--config", default="config.yaml", help="Config YAML path (edited in place).")
     parser.add_argument("--experiments", default="experiments.tsv", help="TSV log of all runs.")
     parser.add_argument("--model", default=None, help="LLM model id (default depends on --local).")

@@ -2,7 +2,7 @@
 Data-driven transforms. No hardcoded task names.
 
 Transform pipelines are built from:
-  - data_list.yaml (top-level `modality` key)
+  - the `--modality` flag (ct | mri | xray | color)
   - data_list.yaml structure (has_masks, reader)
   - args (hyperparameters like spatial_size, a_min/a_max, repeats)
 """

@@ -57,7 +57,7 @@ uv run simple_ai_train --config config.yaml --data-dir /content/liver_data
 如果你想在 notebook 中手動呼叫各個階段，模組都可直接 import：
 
 ```python
-from src.data import load_modality_and_data, populate_data_lists, generate_dataset
+from src.data import load_data_list, populate_data_lists, generate_dataset
 from src.transforms import build_train_transform, build_val_transform
 from src.model import create_timm_model, generate_optimizer
 from src.train import train_pipeline, build_criterion

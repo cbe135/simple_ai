@@ -4,7 +4,8 @@ a data directory. Run this ONCE before ``python src/main.py --data-dir <dir>``.
 
 The pipeline (``src/main.py``) never downloads data; it expects the target
 directory to already contain ``data_list.yaml`` (or ``data_list.json``) with a
-top-level ``modality`` key and a ``data`` list of per-patient dicts.
+``data`` list of per-patient dicts. The modality is passed to training via the
+``--modality`` flag, not stored in the data list.
 
 Idempotent: if a data list already exists in ``--data-dir``, nothing is done.
 
@@ -177,7 +178,7 @@ def main(argv=None):
         "--data-dir",
         type=str,
         required=True,
-        help="Target data directory that will contain data_list.yaml (e.g. /content/dataset).",
+        help="Target data directory that will contain data_list.yaml (e.g. /content/dataset). Modality is set at train time via --modality.",
     )
     parser.add_argument(
         "--data-name",

@@ -72,12 +72,13 @@ from src.main import get_parser, main
 或直接用各模組組裝你自己的迴圈：
 
 ```python
-from src.data import load_modality_and_data, populate_data_lists, generate_dataset, generate_dataloader
+from src.data import load_data_list, populate_data_lists, generate_dataset, generate_dataloader
 from src.transforms import build_train_transform, build_val_transform
 from src.model import create_timm_model, generate_optimizer, get_device
 from src.train import build_criterion, train_pipeline
 
-modality, data_dicts = load_modality_and_data(args.data_dir)
+modality = "ct"  # 由 --modality 傳入
+data_dicts = load_data_list(args, args.data_dir)
 args.data_list = populate_data_lists(args, data_dicts)
 from src.transforms import derive_spatial_dims
 spatial_dims = derive_spatial_dims(data_dicts[:1])

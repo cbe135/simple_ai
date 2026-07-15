@@ -10,7 +10,7 @@ Every dataset ships with:
 
 ```
 data_dir/
-├── data_list.yaml        # top-level modality + data: (image/mask/label) entries
+├── data_list.yaml        # data: (image/mask/label) entries
 ├── images/               # image files
 └── masks/                # (optional) mask files
 ```
@@ -18,7 +18,7 @@ data_dir/
 The pipeline automatically derives:
 - **Reader** — from file extensions (`.nii.gz` → NIfTI, `.jpg`/`.png` → PIL)
 - **Has masks** — from whether `data_list.yaml` entries contain a `"mask"` key
-- **Preprocessing** — from the `modality` key in `data_list.yaml` (CT → windowing + mask + resize; X-ray → resize only)
+- **Preprocessing** — from the `--modality` flag (CT → windowing + mask + resize; X-ray → resize only)
 
 No `if task == ...` anywhere in code.
 
@@ -45,8 +45,8 @@ The pipeline does **not** download data. The directory you pass to
 - `images/` — the image files
 - `masks/` — (optional) the corresponding mask files
 - `data_list.yaml` (or `data_list.json`) — see [Data format](#data-format)
-  below; it includes a top-level `modality` key and a `data` list of
-  per-patient dicts (image, optional mask, label).
+  below; it holds a `data` list of per-patient dicts (image, optional mask,
+  label). The imaging modality is supplied at train time via `--modality`.
 
 If you need to fetch the example dataset from Google Drive, use the
 standalone preparation script (idempotent — safe to re-run):
@@ -73,16 +73,14 @@ your_data/
 ├── masks/                  # optional (omit if no segmentation masks)
 │   ├── mask_001.nii.gz
 │   └── ...
-└── data_list.yaml          # required: modality + data entries
+└── data_list.yaml          # required: data entries
 ```
 
-`data_list.yaml` has a top-level **`modality`** key (the previously separate
-`dataset_info.yaml` is no longer used) and a **`data`** list where **each
-patient is its own dictionary**:
+`data_list.yaml` holds a **`data`** list where **each patient is its own
+dictionary**. The imaging modality is not stored here — it is passed to
+training via the `--modality` flag:
 
 ```yaml
-modality: ct                # ct | mri | xray | color (drives preprocessing)
-
 data:
   - image: "images/img_001.nii.gz"
     mask: "masks/mask_001.nii.gz"   # omit this key if the dataset has no masks
@@ -93,8 +91,7 @@ data:
   # ...one dict per patient, with `label` given here
 ```
 
-**Accepted `modality` values:** `ct`, `mri`, `xray`, `color` (matched
-case-insensitively, so `CT` / `Ct` also work). There is **no** `ct2d` /
+**Accepted `--modality` values:** `ct`, `mri`, `xray`, `color`. There is **no** `ct2d` /
 `ct3d` / `mri2d` / `mri3d` distinction — the image *dimensionality* (2D vs
 3D volume) is derived automatically from the file extension
 (`.nii.gz` / `.nii` → NIfTI volume; `.jpg` / `.png` / … → 2D PIL). The
@@ -132,24 +129,24 @@ python src/main.py --config config.yaml --data-dir /content/liver_data
 ## CLI
 
 ```
-python src/main.py --config CONFIG_FILE --data-dir DATA_DIR [--output-dir OUTPUT_DIR]
+python src/main.py --config CONFIG_FILE --data-dir DATA_DIR --modality MODALITY [--output-dir OUTPUT_DIR]
 ```
 
 | Argument | Description |
 |---|---|
 | `--config` | Path to config YAML (default: `config.yaml`) |
-| `--data-dir` | **Required.** Directory containing `data_list.yaml` (or `data_list.json`) with a top-level `modality` key, e.g. `/content/liver_data`. |
-| `--modality` | Override the modality (`ct` \| `mri` \| `xray` \| `color`). Defaults to the `modality` key in the data list. |
+| `--data-dir` | **Required.** Directory containing `data_list.yaml` (or `data_list.json`) with a `data` list, e.g. `/content/liver_data`. |
+| `--modality` | **Required.** Imaging modality (`ct` \| `mri` \| `xray` \| `color`); drives preprocessing. |
 | `--output-dir` | Parent directory for run outputs. A timestamped subdirectory (`YYYYMMDD_HHMMSS`) is created here holding the weights, loss curve, config, and ROC PNGs. Defaults to the current working directory. |
 
 ### Examples
 
 ```bash
 # Local run, data lives in ./my_data and outputs go to ./results
-python src/main.py --config config.yaml --data-dir ./my_data --output-dir ./results
+python src/main.py --config config.yaml --data-dir ./my_data --modality ct --output-dir ./results
 
 # Colab: data already in /content/liver_data, outputs in /content
-python src/main.py --config config.yaml --data-dir /content/liver_data
+python src/main.py --config config.yaml --data-dir /content/liver_data --modality ct
 ```
 
 ### Run output
@@ -206,7 +203,6 @@ Each dataset needs:
 ### 1. `data_list.yaml`
 
 ```yaml
-modality: ct                # ct | mri | xray | color (drives preprocessing)
 data:
   - image: "path/to/image1.nii.gz"
     mask: "path/to/mask1.nii.gz"    # omit if no masks
@@ -216,10 +212,10 @@ data:
     label: 1
 ```
 
-The top-level `modality` key (previously a separate `dataset_info.yaml`) selects
-the preprocessing. There is no `ct2d`/`ct3d`/`mri2d`/`mri3d` — the image
-dimensionality (2D vs 3D volume) is derived from the file extension, not the
-modality name.
+The imaging modality is supplied at train time via the `--modality` flag
+(`ct` / `mri` / `xray` / `color`); it is not stored in this file. There is no
+`ct2d`/`ct3d`/`mri2d`/`mri3d` — the image dimensionality (2D vs 3D volume) is
+derived from the file extension, not the modality name.
 
 | Modality | Preprocessing |
 |---|---|
@@ -249,7 +245,7 @@ No code changes needed. Follow these steps:
 
 ```
 your_data/
-├── data_list.yaml        # required (modality + data entries)
+├── data_list.yaml        # required (data entries)
 ├── images/               # required
 │   ├── img_001.nii.gz    # (or .jpg, .png, .dcm, ...)
 │   ├── img_002.nii.gz
@@ -261,13 +257,13 @@ your_data/
 
 ### Step 2: Create `data_list.yaml`
 
-List every sample with its image path, optional mask, and label. The
-**`modality`** key goes at the top level (no separate `dataset_info.yaml`).
+List every sample with its image path, optional mask, and label. The imaging
+modality is supplied at train time via the `--modality` flag (not stored in
+this file).
 
 **With masks (e.g. ct segmentation):**
 
 ```yaml
-modality: ct
 data:
   - image: "path/to/img_001.nii.gz"
     mask: "path/to/mask_001.nii.gz"
@@ -280,7 +276,6 @@ data:
 **Without masks (e.g. xray classification):**
 
 ```yaml
-modality: xray
 data:
   - image: "path/to/img_001.jpg"
     label: 0
@@ -320,8 +315,8 @@ environ:
 data:
   spatial_size: [224, 224]       # resize target (match your model's expected input)
   repeats: 3                     # number of channels to repeat to
-  a_min: -125                    # CT window min (only used if modality: CT)
-  a_max: 200                     # CT window max (only used if modality: CT)
+  a_min: -125                    # CT window min (only used with --modality ct)
+  a_max: 200                     # CT window max (only used with --modality ct)
   affine_prob: 0.5               # probability of random affine augmentation
   flip_prob: 0.5                 # probability of random flip
   cache_rate: 1                  # dataset caching rate
@@ -344,7 +339,7 @@ If you don't have Google Drive file IDs, place the data manually in your working
 ### Step 5: Run
 
 ```bash
-python src/main.py --config config_my_data.yaml
+python src/main.py --config config_my_data.yaml --data-dir your_data --modality ct
 ```
 
 Or in the notebook:
@@ -374,7 +369,7 @@ INFO - 350 training, 75 validation, 75 testing
 | **Reader** | File extension of first image in `data_list.yaml` | `.nii.gz` → MONAI NIfTI; `.jpg` → PIL |
 | **Has masks** | Whether `data_list.yaml` entries have a `"mask"` key | `"mask" in data_dicts[0]` |
 | **Spatial dims (2D/3D)** | Shape of the first loaded image (not the extension — `.nii.gz` can be 2D *or* 3D) | `image.ndim - 1` → 2 or 3 |
-| **Preprocessing** | `data_list.yaml` → top-level `modality` key | `CT` → windowing + mask; `X-ray` → resize |
+| **Preprocessing** | `--modality` flag | `ct` → windowing + mask; `xray` → resize |
 | **Resize / affine rank** | Auto-padded to the detected spatial dims | `spatial_size: [250,250]` + 3D data → `[250,250,250]`; affine ranges padded with `[0,0]` on the new axis |
 | **Data source** | Config YAML → `data_source.file_ids` + `archive_format` | Google Drive download via gdown |
 
@@ -405,7 +400,7 @@ All parameters are in the config YAML. Key parameters:
 
 ### Transforms (extras)
 
-The pipeline builds a **preset** transform set automatically from your data (`data_list.yaml` `modality` key, whether masks exist, and file extensions). You can append your own MONAI transforms via the `transforms` block in the config, written in [MONAI bundle](https://docs.monai.io/en/stable/mb/config_syntax.html) format:
+The pipeline builds a **preset** transform set automatically from your data (the `--modality` flag, whether masks exist, and file extensions). You can append your own MONAI transforms via the `transforms` block in the config, written in [MONAI bundle](https://docs.monai.io/en/stable/mb/config_syntax.html) format:
 
 ```yaml
 transforms:

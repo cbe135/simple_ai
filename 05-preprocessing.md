@@ -15,8 +15,8 @@
 | `build_train_transform(args, data_dicts_sample, dataset_info)` | `loaders + preprocess + augmentation + 額外` 組成訓練 transform |
 | `build_val_transform(args, data_dicts_sample, dataset_info)` | `loaders + preprocess + 額外`（**不含**增強）組成驗證 transform |
 
-其中 `dataset_info` 是一個 dict：`{"modality": "ct", "spatial_dims": 2}`（大小寫不敏感），
-由 `data.py` 的 `load_modality_and_data` 讀取 `data_list.yaml` 頂層 `modality` 得到；
+其中 `dataset_info` 是一個 dict：`{"modality": "ct", "spatial_dims": 2}`，
+`modality` 由 `--modality` 參數傳入；
 `spatial_dims` 則由 `transforms.derive_spatial_dims` **載入第一張影像後依其形狀自動判斷**
 （`.nii.gz` 既可能是 2D 也可能是 3D，無法只看副檔名）。
 

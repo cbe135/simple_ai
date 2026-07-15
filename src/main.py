@@ -3,12 +3,12 @@ CNN Classification Pipeline
 
 Entry point for end-to-end training. All behavior is driven by:
   - config YAML (data source, hyperparameters)
-  - data_list.yaml (top-level `modality` key + `data` list of per-patient dicts)
-  - data_list.yaml structure (has_masks, image format)
+  - --modality flag (ct | mri | xray | color)
+  - data_list.yaml (`data` list of per-patient dicts; drives has_masks / reader)
 
 Usage:
-    python src/main.py --data-dir /content/dataset
-    python src/main.py --config config.yaml --data-dir /content/dataset
+    python src/main.py --data-dir /content/dataset --modality ct
+    python src/main.py --config config.yaml --data-dir /content/dataset --modality ct
 """
 print(">>> booting pipeline...", flush=True)
 
@@ -158,17 +158,15 @@ def main():
         required=True,
         help=(
             "Directory containing data_list.yaml (or data_list.json) with a "
-            "top-level `modality` key, e.g. /content/liver_data. Required."
+            "`data` list of per-patient dicts, e.g. /content/liver_data. Required."
         ),
     )
     parser.add_argument(
         "--modality",
         type=str,
-        default=None,
-        help=(
-            "Override the modality (ct | mri | xray | color). Defaults to the "
-            "top-level `modality` key in the data list."
-        ),
+        required=True,
+        choices=["ct", "mri", "xray", "color"],
+        help="Imaging modality (ct | mri | xray | color); drives preprocessing.",
     )
     parser.add_argument(
         "--output-dir",
@@ -269,13 +267,11 @@ def main():
     data_dir = find_data_dir(args, data_dir)
     logger.info(f"Resolved data directory: {data_dir}")
 
-    # Load data list + modality (modality is a required top-level key; the
-    # --modality CLI flag overrides it).
-    from src.data import load_modality_and_data
+    # Load the data list; modality comes from the required --modality flag.
+    from src.data import load_data_list
 
-    modality, data_dicts = load_modality_and_data(data_dir)
-    if args_cli.modality:
-        modality = args_cli.modality
+    data_dicts = load_data_list(args, data_dir)
+    modality = args_cli.modality
 
     # Derive properties from data
     from src.transforms import derive_has_masks, derive_reader, derive_spatial_dims

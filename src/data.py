@@ -11,40 +11,18 @@ logger = logging.getLogger(__name__)
 
 
 def load_data_list(args, data_dir=None):
-    """Load the data list and return the list of data dicts.
+    """Load the data list and return the list of per-image data dicts.
 
-    Supports data_list.yaml (preferred) with a data_list.json fallback.
-    Both are expected to expose a top-level "data" key.
+    Supports data_list.yaml (preferred) with a data_list.json fallback. Both
+    are expected to expose a top-level ``data`` list of dicts (each with at
+    least ``image`` and ``label``; ``mask`` optional). The modality is no
+    longer read from this file — it is supplied via the ``--modality`` flag.
     """
     if data_dir is None:
         from src.env_setup import default_data_dir
 
         data_dir = default_data_dir()
 
-    yaml_path = os.path.join(data_dir, "data_list.yaml")
-    json_path = os.path.join(data_dir, "data_list.json")
-
-    if os.path.exists(yaml_path):
-        with open(yaml_path, "r") as fp:
-            return yaml.safe_load(fp)["data"]
-
-    if os.path.exists(json_path):
-        with open(json_path, "r", encoding="utf-8") as fp:
-            return json.load(fp)["data"]
-
-    raise FileNotFoundError(
-        f"No data list found in {data_dir} (expected data_list.yaml or data_list.json)"
-    )
-
-
-def load_modality_and_data(data_dir):
-    """Load the top-level ``modality`` key and the ``data`` list.
-
-    The modality used to be read from a separate ``dataset_info.yaml``; it is
-    now a required top-level key of ``data_list.yaml`` / ``data_list.json``.
-
-    Returns ``(modality, data_dicts)``.
-    """
     yaml_path = os.path.join(data_dir, "data_list.yaml")
     json_path = os.path.join(data_dir, "data_list.json")
 
@@ -59,20 +37,13 @@ def load_modality_and_data(data_dir):
             f"No data list found in {data_dir} (expected data_list.yaml or data_list.json)"
         )
 
-    modality = (raw or {}).get("modality")
-    if not modality:
+    data_dicts = (raw or {}).get("data")
+    if not isinstance(data_dicts, list) or not data_dicts:
         raise SystemExit(
-            "Missing required top-level 'modality' key in the data list "
-            f"({yaml_path if os.path.exists(yaml_path) else json_path}). "
-            "Add e.g. `modality: CT` at the top level (the separate "
-            "dataset_info.yaml file is no longer used)."
+            "The data list must contain a non-empty top-level 'data' list of dicts."
         )
 
-    data_dicts = (raw or {}).get("data")
-    if not isinstance(data_dicts, list):
-        raise SystemExit("The data list must contain a top-level 'data' list of dicts.")
-
-    return modality, data_dicts
+    return data_dicts
 
 
 def populate_data_lists(args, data_dicts):
