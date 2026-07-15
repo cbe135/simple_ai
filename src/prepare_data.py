@@ -24,6 +24,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import gzip
 import shutil
 import tarfile
 import zipfile
@@ -113,25 +114,80 @@ def _download_via_gdown(data_dir, archive_name, file_ids):
 
     for fid in file_ids:
         url = f"https://drive.google.com/uc?id={fid}"
-        out = os.path.join(data_dir, f"{fid}.zip")
-        if os.path.exists(out):
+        tmp = os.path.join(data_dir, f"{fid}.download")
+        if os.path.exists(tmp):
             continue
         try:
-            gdown.download(url, out, quiet=False, fuzzy=True)
+            gdown.download(url, tmp, quiet=False, fuzzy=True)
         except gdown.exceptions.FileURLRetrievalError:
             logger.warning(
                 f"gdown failed for {fid}; retrying with confirm-token fallback..."
             )
-            _download_with_confirm(fid, out)
+            _download_with_confirm(fid, tmp)
 
-    # Merge multiple downloads into one archive if needed
-    # (for now, treat each file as a separate archive and extract them all)
-    for fid in file_ids:
-        fpath = os.path.join(data_dir, f"{fid}.zip")
-        if os.path.exists(fpath):
-            _extract(data_dir, f"{fid}.zip", os.path.join(data_dir, fid))
+        # Detect the real format (gdown has no extension info) and rename.
+        fmt = _detect_archive_format(tmp)
+        if fmt is None:
+            logger.warning(
+                f"Downloaded file {tmp} is not a recognized archive; "
+                f"left in place for manual inspection."
+            )
+            continue
+        final_path = os.path.join(data_dir, f"{fid}.{fmt}")
+        if os.path.exists(final_path):
+            os.remove(final_path)
+        os.rename(tmp, final_path)
+
+        # Extract contents directly into data_dir: the pipeline expects
+        # data_list.yaml at the root of --data-dir, not in a subfolder.
+        _extract(data_dir, f"{fid}.{fmt}", data_dir)
 
     logger.info("Download complete")
+
+
+def _detect_archive_format(path):
+    """Return the archive format of *path* from its magic bytes.
+
+    Returns one of ``"zip"``, ``"tar"``, ``"tar.gz"``, ``"gz"``, ``"bz2"``,
+    ``"xz"``, ``"7z"``, ``"rar"``, or ``None`` if not a recognized archive.
+    """
+    try:
+        with open(path, "rb") as f:
+            head = f.read(263)
+    except OSError:
+        return None
+    if not head:
+        return None
+
+    if head[:4] in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):
+        return "zip"
+    if head[:2] == b"\x1f\x8b":  # gzip
+        try:
+            with gzip.open(path, "rb") as gz:
+                if gz.read(263)[257:262] == b"ustar":
+                    return "tar.gz"
+        except OSError:
+            pass
+        return "gz"
+    if head[:3] == b"BZh":  # bzip2
+        try:
+            import bz2
+
+            with open(path, "rb") as f, bz2.open(f, "rb") as b:
+                if b.read(263)[257:262] == b"ustar":
+                    return "bz2"
+        except OSError:
+            pass
+        return "bz2"
+    if head[:6] == b"\xfd7zXZ\x00":
+        return "xz"
+    if head[:6] == b"7z\xbc\xaf\x27\x1c":
+        return "7z"
+    if head[:4] == b"Rar!":
+        return "rar"
+    if head[257:262] == b"ustar":
+        return "tar"
+    return None
 
 
 def _download_with_confirm(file_id, out_path):
@@ -170,19 +226,40 @@ def _download_with_confirm(file_id, out_path):
 
 
 def _extract(data_dir, archive_name, target_dir):
-    """Extract archive if target_dir doesn't exist."""
+    """Extract archive into *target_dir* (auto-detecting its format).
+
+    The extraction destination is *target_dir* (the pipeline root), not
+    *data_dir*, so ``data_list.yaml`` lands where ``main.py`` expects it.
+    """
     archive_path = os.path.join(data_dir, archive_name)
     if not os.path.exists(archive_path):
         return
 
-    if archive_name.endswith(".zip"):
-        with zipfile.ZipFile(archive_path, "r") as zf:
-            zf.extractall(data_dir)
-    elif archive_name.endswith(".tar.gz") or archive_name.endswith(".tgz"):
-        with tarfile.open(archive_path, "r") as tf:
-            tf.extractall(path=data_dir)
-    else:
-        logger.warning(f"Unknown archive format: {archive_name}")
+    os.makedirs(target_dir, exist_ok=True)
+
+    fmt = _detect_archive_format(archive_path)
+    try:
+        if fmt == "zip":
+            with zipfile.ZipFile(archive_path, "r") as zf:
+                zf.extractall(target_dir)
+        elif fmt in ("tar", "tar.gz", "bz2", "xz"):
+            with tarfile.open(archive_path, "r:*") as tf:
+                tf.extractall(path=target_dir)
+        elif fmt == "gz":
+            # Single gzip file: decompress into target_dir.
+            base = os.path.basename(archive_path)[:-3] or "data"
+            with gzip.open(archive_path, "rb") as fin, open(
+                os.path.join(target_dir, base), "wb"
+            ) as fout:
+                shutil.copyfileobj(fin, fout)
+        else:
+            logger.warning(f"Unknown archive format: {archive_name}")
+            return
+    except (zipfile.BadZipFile, tarfile.TarError, OSError) as exc:
+        logger.error(f"Failed to extract {archive_path}: {exc}")
+        raise
+
+    logger.info(f"Extracted {archive_name} -> {target_dir}")
 
 
 def _extract_if_needed(data_dir, archive_name, target_dir):
