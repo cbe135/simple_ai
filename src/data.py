@@ -86,20 +86,26 @@ def generate_base_cache(args, data_dicts, preprocess_transform, cache_dir):
     over this base (see :func:`split_indices`), which keeps the cached items
     valid when the split ratio changes between runs.
     """
-    from monai.data import CacheDataset
+    from monai.data import PersistentDataset
+    import inspect
 
-    cache_rate = float(args["data"]["cache_rate"])
     logger.info(
-        "Creating persistent CacheDataset (cache_rate=%s, num_items=%d) at %s",
-        cache_rate, len(data_dicts), cache_dir,
+        "Creating persistent CacheDataset (num_items=%d) at %s",
+        len(data_dicts), cache_dir,
     )
-    dataset = CacheDataset(
-        data_dicts,
-        preprocess_transform,
-        cache_rate=cache_rate,
-        cache_dir=cache_dir,
-        progress=False,
-    )
+    # PersistentDataset writes transformed items to disk (cache_dir) and reads
+    # them back on later runs/processes, so the heavy NIfTI load+window only
+    # happens once. copy_cache=True also keeps an in-RAM mirror for in-run
+    # speed (replicates the old cache_rate=1.0 RAM behavior). progress=False
+    # keeps the log quiet. Kwargs are filtered so this works across MONAI
+    # versions that may lack progress/copy_cache.
+    sig = inspect.signature(PersistentDataset.__init__)
+    kwargs = {"cache_dir": cache_dir}
+    if "progress" in sig.parameters:
+        kwargs["progress"] = False
+    if "copy_cache" in sig.parameters:
+        kwargs["copy_cache"] = True
+    dataset = PersistentDataset(data_dicts, preprocess_transform, **kwargs)
     logger.info(
         "CacheDataset ready (num_items=%d) at %s; reused if present",
         len(data_dicts), cache_dir,
