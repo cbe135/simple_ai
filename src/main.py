@@ -12,6 +12,8 @@ Usage:
 """
 print(">>> booting pipeline...", flush=True)
 
+import logging
+import os
 from argparse import ArgumentParser
 from logging import getLogger, basicConfig, INFO, Formatter, FileHandler
 from os import path, getcwd, makedirs
@@ -179,6 +181,11 @@ def main():
         ),
     )
     parser.add_argument(
+        "--clear-cache",
+        action="store_true",
+        help="Remove the persistent transformed-data cache before training.",
+    )
+    parser.add_argument(
         "--device",
         type=str,
         default=None,
@@ -194,8 +201,11 @@ def main():
     # both the cell and run.log, so a single handler covers the console and the
     # log file. This avoids the duplicate output caused by having separate
     # stderr + stdout handlers both reaching the terminal.
+    _log_level = getattr(
+        logging, os.environ.get("SIMPLE_AI_LOG_LEVEL", "INFO").upper(), logging.INFO
+    )
     basicConfig(
-        level=INFO,
+        level=_log_level,
         format="[%(asctime)s.%(msecs)03d][%(levelname)5s](%(name)s) - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         stream=stdout,
@@ -287,24 +297,52 @@ def main():
     logger.info(f"Has masks: {has_masks}")
     logger.info(f"Reader: {reader_kw or 'monai default'}")
 
-    # Split data
-    from src.data import populate_data_lists
+    # Split data by INDEX over the full patient list, so a single persistent
+    # cache (built below) is reused even when the split ratio changes between
+    # runs. Dict subsets are derived from the indices for logging/plots only.
+    from src.data import (
+        split_indices,
+        resolve_cache_dir,
+        generate_base_cache,
+        make_train_dataset,
+        make_eval_dataset,
+    )
+    from src.transforms import (
+        build_train_transform,
+        build_val_transform,
+        build_preprocess_transform,
+        get_augmentation,
+        get_augmentation_extra,
+    )
+    from monai.transforms import Compose
 
-    train_dicts, val_dicts, test_dicts = populate_data_lists(args, data_dicts)
+    labels = [a["label"] for a in data_dicts]
+    train_idx, val_idx, test_idx = split_indices(args, len(data_dicts), labels)
+    train_dicts = [data_dicts[i] for i in train_idx]
+    val_dicts = [data_dicts[i] for i in val_idx]
+    test_dicts = [data_dicts[i] for i in test_idx]
     logger.info(f"{len(train_dicts)} training, {len(val_dicts)} validation, {len(test_dicts)} testing")
 
-    # Build transforms (pass data_dicts sample for derivation)
-    from src.transforms import build_train_transform, build_val_transform
-
+    # Build transforms. Preprocessing is deterministic and cached; augmentation
+    # is applied per-epoch on top of the cached items (see make_train_dataset).
     train_transform = build_train_transform(args, data_dicts, dataset_info)
     val_transform = build_val_transform(args, data_dicts, dataset_info)
+    preprocess_transform = build_preprocess_transform(args, data_dicts, dataset_info)
+    aug_transform = Compose(get_augmentation(args, dataset_info) + get_augmentation_extra(args))
 
-    # Build datasets
-    from src.data import generate_dataset
+    # Persistent transform cache (auto-isolated by preprocessing-config hash).
+    cache_dir = resolve_cache_dir(args, data_dir, preprocess_transform)
+    if args_cli.clear_cache:
+        import shutil
 
-    train_set = generate_dataset(args, train_dicts, train_transform)
-    val_set = generate_dataset(args, val_dicts, val_transform)
-    test_set = generate_dataset(args, test_dicts, val_transform)
+        if os.path.exists(cache_dir):
+            shutil.rmtree(cache_dir)
+            logger.info(f"Cleared transform cache at {cache_dir}")
+
+    base = generate_base_cache(args, data_dicts, preprocess_transform, cache_dir)
+    train_set = make_train_dataset(base, train_idx, aug_transform)
+    val_set = make_eval_dataset(base, val_idx)
+    test_set = make_eval_dataset(base, test_idx)
 
     # Save pre/post transformation sample images to run_dir/samples/
     from src.utils import plot_transform_result

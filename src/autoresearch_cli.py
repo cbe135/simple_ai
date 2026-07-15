@@ -21,6 +21,7 @@ Examples
 
 import argparse
 import logging
+import os
 import sys
 from logging import FileHandler, Formatter
 from pathlib import Path
@@ -87,11 +88,29 @@ def main(argv=None):
     )
     parser.add_argument("--timeout", type=int, default=700, help="Training timeout (seconds).")
     parser.add_argument("--runs", type=int, default=10, help="Number of optimization runs.")
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging verbosity for this wrapper and the training subprocess "
+        "(via SIMPLE_AI_LOG_LEVEL). Default: INFO.",
+    )
+    parser.add_argument(
+        "--clear-cache",
+        action="store_true",
+        help="Clear the persistent transformed-data cache before each training run.",
+    )
     parser.add_argument("--gdown-id", default=None, help="Google Drive file id to download first.")
     parser.add_argument("--data-name", default=None, help="Dataset name used for archive naming.")
     parser.add_argument("--repo-root", default=None, help="Repo root (default: current dir).")
 
     args = parser.parse_args(argv)
+
+    # Apply the chosen log level to this wrapper and forward it to the training
+    # subprocess (main.py reads SIMPLE_AI_LOG_LEVEL for its own basicConfig).
+    log_level = (args.log_level or "INFO").upper()
+    logging.getLogger().setLevel(getattr(logging, log_level, logging.INFO))
+    os.environ["SIMPLE_AI_LOG_LEVEL"] = log_level
 
     if args.gdown_id and not args.data_dir:
         args.data_dir = str(Path(args.data_dir or "/content/dataset"))

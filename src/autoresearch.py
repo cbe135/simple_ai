@@ -312,12 +312,14 @@ def ollama_warmup(client, model: str) -> None:
 # --------------------------------------------------------------------------- #
 # Training subprocess + git helpers
 # --------------------------------------------------------------------------- #
-def run_training(repo_root: Path, config_name: str, data_dir, modality, timeout: int):
+def run_training(repo_root: Path, config_name: str, data_dir, modality, timeout: int, clear_cache=False):
     cmd = ["uv", "run", "python", "src/main.py", "--config", config_name]
     if data_dir:
         cmd += ["--data-dir", str(data_dir)]
     if modality:
         cmd += ["--modality", str(modality)]
+    if clear_cache:
+        cmd += ["--clear-cache"]
     logger.info("Running training: %s", " ".join(cmd))
     logger.info("Streaming training output (this can take several minutes)...")
     proc = subprocess.Popen(
@@ -344,13 +346,18 @@ def run_training(repo_root: Path, config_name: str, data_dir, modality, timeout:
     if t.is_alive():
         proc.kill()
         t.join()
-        return None, f"training timed out after {timeout}s"
+        return None, None, f"training timed out after {timeout}s"
     rc = proc.wait()
     stdout = "\n".join(buf)
     if rc != 0:
         tail = "\n".join(buf[-20:])
-        return None, f"training exited {rc}:\n{tail}"
-    return parse_validation_loss(stdout)
+        return None, None, f"training exited {rc}:\n{tail}"
+    val_loss, err = parse_validation_loss(stdout)
+    run_dir = None
+    m = re.search(r"Run output directory:\s*(\S+)", stdout)
+    if m:
+        run_dir = m.group(1)
+    return val_loss, run_dir, err
 
 
 def _git(args, cwd: Path) -> subprocess.CompletedProcess:
@@ -383,11 +390,29 @@ def git_checkout(path: Path) -> None:
 # --------------------------------------------------------------------------- #
 # Experiment bookkeeping
 # --------------------------------------------------------------------------- #
-def append_tsv(path: Path, run_idx: int, val_loss, status: str, notes: str) -> None:
+def append_tsv(path: Path, run_idx: int, run_dir, val_loss, status: str, modified: str, notes: str) -> None:
     vl = "" if val_loss is None else f"{val_loss:.6f}"
+    run_dir_s = run_dir or ""
+    modified_s = (modified or "").replace("\t", " ").replace("\n", " ")
     notes = (notes or "").replace("\t", " ").replace("\n", " ")
     with open(path, "a") as f:
-        f.write(f"{run_idx}\t{vl}\t{status}\t{notes}\n")
+        f.write(f"{run_idx}\t{run_dir_s}\t{vl}\t{status}\t{modified_s}\t{notes}\n")
+
+
+def diff_configs(old, new, prefix="") -> list:
+    """Return a compact ``key: old -> new`` summary of leaf changes between configs."""
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return [f"{prefix}: {old!r} -> {new!r}"]
+    changes = []
+    for k in sorted(set(old) | set(new)):
+        p = f"{prefix}.{k}" if prefix else str(k)
+        ov = old.get(k)
+        nv = new.get(k)
+        if isinstance(ov, dict) and isinstance(nv, dict):
+            changes.extend(diff_configs(ov, nv, p))
+        elif ov != nv:
+            changes.append(f"{p}: {ov!r} -> {nv!r}")
+    return changes
 
 
 def build_user_prompt(cfg_text: str, history) -> str:
@@ -432,7 +457,7 @@ def run(args: dict) -> None:
     system = PROGRAM_MD.read_text(encoding="utf-8")
     if not experiments_path.exists():
         with open(experiments_path, "w") as f:
-            f.write("run\tval_loss\tstatus\tnotes\n")
+            f.write("run\trun_dir\tval_loss\tstatus\tmodified\tnotes\n")
 
     client = None
     model = args.get("model")
@@ -496,23 +521,27 @@ def run(args: dict) -> None:
             cfg, err = extract_yaml_block(text)
             if err:
                 logger.warning("Run %d skipped (LLM output invalid: %s)", i + 1, err)
-                history.append({"status": "PARSE_ERROR", "notes": err, "val_loss": None})
-                append_tsv(experiments_path, i, None, "PARSE_ERROR", err)
+                history.append({"status": "PARSE_ERROR", "notes": err, "val_loss": None, "run_dir": None, "modified": ""})
+                append_tsv(experiments_path, i, None, None, "PARSE_ERROR", "", err)
                 continue
 
+            modified = "; ".join(diff_configs(current_cfg, cfg))
             save_config(config_path, cfg)
 
             if local and unload:
                 ollama_unload(model)
 
-            val_loss, terr = run_training(repo_root, config_path.name, data_dir, modality, timeout)
+            val_loss, run_dir, terr = run_training(
+                repo_root, config_path.name, data_dir, modality, timeout,
+                args.get("clear_cache", False),
+            )
             if terr or val_loss is None:
                 status = "ERROR"
                 notes = terr or "no validation loss reported"
                 logger.warning("Run %d failed: %s", i + 1, notes)
                 git_checkout(config_path)
-                history.append({"status": status, "notes": notes, "val_loss": None})
-                append_tsv(experiments_path, i, None, status, notes)
+                history.append({"status": status, "notes": notes, "val_loss": None, "run_dir": run_dir, "modified": modified})
+                append_tsv(experiments_path, i, run_dir, None, status, modified, notes)
                 continue
 
             improved = best is None or val_loss < best[0]
@@ -531,8 +560,8 @@ def run(args: dict) -> None:
                 )
                 git_checkout(config_path)
 
-            history.append({"status": status, "notes": "", "val_loss": val_loss})
-            append_tsv(experiments_path, i, val_loss, status, "")
+            history.append({"status": status, "notes": "", "val_loss": val_loss, "run_dir": run_dir, "modified": modified})
+            append_tsv(experiments_path, i, run_dir, val_loss, status, modified, "")
     finally:
         if local:
             stop_ollama()

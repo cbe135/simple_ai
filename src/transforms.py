@@ -242,3 +242,19 @@ def build_val_transform(args, data_dicts_sample, dataset_info):
         + get_preprocess(args, data_dicts_sample, dataset_info)
         + get_preprocess_extra(args)
     )
+
+
+def build_preprocess_transform(args, data_dicts_sample, dataset_info):
+    """Deterministic preprocessing only (no augmentation), for persistent caching.
+
+    The output of this pipeline is what gets cached to disk. Augmentation is
+    kept separate (see ``get_augmentation``) and applied per-epoch on top of
+    the cached items, so the cache stays valid regardless of split changes or
+    augmentation tweaks.
+    """
+    return Compose(
+        get_loaders(data_dicts_sample)
+        + get_loaders_extra(args)
+        + get_preprocess(args, data_dicts_sample, dataset_info)
+        + get_preprocess_extra(args)
+    )

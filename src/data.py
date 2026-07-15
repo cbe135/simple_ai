@@ -1,4 +1,5 @@
 import os
+import hashlib
 import json
 import yaml
 import logging
@@ -46,32 +47,6 @@ def load_data_list(args, data_dir=None):
     return data_dicts
 
 
-def populate_data_lists(args, data_dicts):
-    """Split data into training, validation, and testing sets."""
-    labels = [a["label"] for a in data_dicts]
-    train_dicts, val_test_dicts = train_test_split(
-        data_dicts,
-        train_size=args["data"]["train_percentage"],
-        test_size=args["data"]["val_percentage"] + args["data"]["test_percentage"],
-        stratify=labels,
-        random_state=args["environ"]["seed"],
-        shuffle=True,
-    )
-
-    val_test_labels = [a["label"] for a in val_test_dicts]
-    val_dicts, test_dicts = train_test_split(
-        val_test_dicts,
-        train_size=args["data"]["val_percentage"]
-        / (args["data"]["val_percentage"] + args["data"]["test_percentage"]),
-        test_size=args["data"]["test_percentage"]
-        / (args["data"]["val_percentage"] + args["data"]["test_percentage"]),
-        stratify=val_test_labels,
-        random_state=args["environ"]["seed"],
-        shuffle=True,
-    )
-    return train_dicts, val_dicts, test_dicts
-
-
 def check_dist(dataset):
     """Check and log the label distribution of a dataset."""
     positive = 0
@@ -88,21 +63,111 @@ def check_dist(dataset):
     )
 
 
-def generate_dataset(args, datalist, transform):
-    """Create a CacheDataset from a data list and transform pipeline."""
+def resolve_cache_dir(args, data_dir, preprocess_transform):
+    """Return the persistent transform-cache directory.
+
+    Defaults to ``<data_dir>/.transform_cache/<hash>``, where the hash isolates
+    different preprocessing configs so a changed transform auto-creates a fresh
+    cache (the old one is orphaned, never reused). Set ``data.cache_dir`` in the
+    config to override.
+    """
+    cfg_dir = (args.get("data", {}) or {}).get("cache_dir")
+    if cfg_dir:
+        return cfg_dir
+    h = hashlib.md5(repr(preprocess_transform).encode("utf-8")).hexdigest()[:12]
+    return os.path.join(str(data_dir), ".transform_cache", h)
+
+
+def generate_base_cache(args, data_dicts, preprocess_transform, cache_dir):
+    """Build ONE persistent ``CacheDataset`` over all patients (preprocessing only).
+
+    Augmentation is intentionally excluded and applied later, per-epoch, by the
+    training dataset wrapper. The train/val/test split is an *index* partition
+    over this base (see :func:`split_indices`), which keeps the cached items
+    valid when the split ratio changes between runs.
+    """
     from monai.data import CacheDataset
 
     cache_rate = float(args["data"]["cache_rate"])
     logger.info(
-        "Creating CacheDataset (cache_rate=%s, num_items=%d)",
-        cache_rate, len(datalist),
+        "Creating persistent CacheDataset (cache_rate=%s, num_items=%d) at %s",
+        cache_rate, len(data_dicts), cache_dir,
     )
-    dataset = CacheDataset(datalist, transform, cache_rate=cache_rate)
+    dataset = CacheDataset(
+        data_dicts,
+        preprocess_transform,
+        cache_rate=cache_rate,
+        cache_dir=cache_dir,
+        progress=False,
+    )
     logger.info(
-        "CacheDataset ready (cache_rate=%s); items are cached on first load",
-        cache_rate,
+        "CacheDataset ready (num_items=%d) at %s; reused if present",
+        len(data_dicts), cache_dir,
     )
     return dataset
+
+
+def split_indices(args, n, labels):
+    """Return ``(train_idx, val_idx, test_idx)`` partitioning ``range(n)``.
+
+    Mirrors :func:`populate_data_lists` but operates on indices so a single
+    cached base dataset can be reused across split-ratio changes.
+    """
+    from sklearn.model_selection import train_test_split
+
+    idx = list(range(n))
+    train_p = float(args["data"]["train_percentage"])
+    val_p = float(args["data"]["val_percentage"])
+    test_p = float(args["data"]["test_percentage"])
+    seed = int(args["environ"]["seed"])
+
+    train_idx, val_test_idx = train_test_split(
+        idx,
+        train_size=train_p,
+        test_size=val_p + test_p,
+        stratify=labels,
+        random_state=seed,
+        shuffle=True,
+    )
+    if val_p + test_p > 0:
+        val_idx, test_idx = train_test_split(
+            val_test_idx,
+            train_size=val_p / (val_p + test_p),
+            test_size=test_p / (val_p + test_p),
+            stratify=[labels[i] for i in val_test_idx],
+            random_state=seed,
+            shuffle=True,
+        )
+    else:
+        val_idx, test_idx = [], []
+    return train_idx, val_idx, test_idx
+
+
+class _AugDataset:
+    """Wrap a cached base dataset, applying stochastic augmentation per fetch."""
+
+    def __init__(self, base, indices, aug_transform):
+        self.base = base
+        self.indices = list(indices)
+        self.aug = aug_transform
+
+    def __len__(self):
+        return len(self.indices)
+
+    def __getitem__(self, i):
+        return self.aug(self.base[self.indices[i]])
+
+
+def make_train_dataset(base, idx, aug_transform):
+    """Training dataset: cached preprocessing + per-epoch augmentation."""
+    return _AugDataset(base, idx, aug_transform)
+
+
+def make_eval_dataset(base, idx):
+    """Validation/test dataset: cached preprocessing only (no augmentation)."""
+    from torch.utils.data import Subset
+
+    return Subset(base, list(idx))
 
 
 def generate_dataloader(args, dataset, shuffle=False, device=None):
