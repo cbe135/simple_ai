@@ -58,7 +58,7 @@ def _load_base_model(model_id: str, cfg: dict, device: str, quantize: str):
     )
 
     trust = bool(cfg["model"].get("trust_remote_code", False))
-    attn = cfg["model"].get("attn_implementation", "eager")
+    attn = cfg["model"].get("attn_implementation", "sdpa")
     from .registry import raise_if_gated
 
     logger.info("Loading base model %s on %s (quantize=%s)…", model_id, device, quantize)
