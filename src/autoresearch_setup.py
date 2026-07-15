@@ -25,7 +25,12 @@ import subprocess
 import sys
 import time
 
-from .autoresearch import OLLAMA_PORT, _ollama_reachable
+from .autoresearch import (
+    OLLAMA_PORT,
+    _ollama_reachable,
+    pull_model,
+    verify_ollama_gpu,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,38 +41,56 @@ DEFAULT_MODEL = "qwen2.5-coder:7b"
 # Ollama installation
 # --------------------------------------------------------------------------- #
 def _ensure_linux_deps() -> None:
-    """Ensure extraction tools the Ollama installer needs are present (e.g. zstd)."""
-    if shutil.which("zstd"):
+    """Ensure the Ollama installer's prerequisites exist (zstd + lspci).
+
+    ``lspci`` (package ``pciutils``) lets the official install script detect the
+    NVIDIA/AMD GPU and configure GPU support; without it you get the
+    "Unable to detect NVIDIA/AMD GPU" warning during install.
+    """
+    pkg_for = {"zstd": "zstd", "lspci": "pciutils"}
+    missing_pkgs = [pkg_for[t] for t in ("zstd", "lspci") if not shutil.which(t)]
+    if not missing_pkgs:
         return
-    logger.info("zstd missing; installing it (needed by the Ollama installer)...")
+
+    logger.info("Installing missing Ollama prerequisites: %s", ", ".join(missing_pkgs))
 
     if shutil.which("apt-get"):
-        runner = ["bash", "-c", "apt-get update -qq && apt-get install -y zstd"]
+        runner = [
+            "bash",
+            "-c",
+            "apt-get update -qq && apt-get install -y " + " ".join(missing_pkgs),
+        ]
     elif shutil.which("dnf"):
-        runner = ["dnf", "install", "-y", "zstd"]
+        runner = ["dnf", "install", "-y", *missing_pkgs]
     elif shutil.which("pacman"):
-        runner = ["pacman", "-S", "--noconfirm", "zstd"]
+        runner = ["pacman", "-S", "--noconfirm", *missing_pkgs]
     else:
+        missing = " ".join(missing_pkgs)
         raise SystemExit(
-            "Could not install 'zstd' automatically (no recognized package "
-            "manager). Install it manually, then re-run:\n"
-            "  Debian/Ubuntu: sudo apt-get install zstd\n"
-            "  RHEL/CentOS/Fedora: sudo dnf install zstd\n"
-            "  Arch: sudo pacman -S zstd"
+            "Could not install prerequisites automatically (no recognized package "
+            f"manager). Install '{missing}' manually, then re-run:\n"
+            "  Debian/Ubuntu: sudo apt-get install " + missing + "\n"
+            "  RHEL/CentOS/Fedora: sudo dnf install " + missing + "\n"
+            "  Arch: sudo pacman -S " + missing
         )
 
     try:
         subprocess.run(runner, check=True)
     except subprocess.CalledProcessError as e:
+        missing = " ".join(missing_pkgs)
         raise SystemExit(
-            f"Failed to install zstd: {e}\nInstall it manually, then re-run:\n"
-            "  Debian/Ubuntu: sudo apt-get install zstd\n"
-            "  RHEL/CentOS/Fedora: sudo dnf install zstd\n"
-            "  Arch: sudo pacman -S zstd"
+            f"Failed to install prerequisites ({missing}): {e}\n"
+            "Install them manually, then re-run:\n"
+            "  Debian/Ubuntu: sudo apt-get install " + missing + "\n"
+            "  RHEL/CentOS/Fedora: sudo dnf install " + missing + "\n"
+            "  Arch: sudo pacman -S " + missing
         )
 
-    if not shutil.which("zstd"):
-        raise SystemExit("zstd still not found after install. Install it manually and re-run.")
+    for t in ("zstd", "lspci"):
+        if not shutil.which(t):
+            raise SystemExit(
+                f"{t} still not found after install. Install it manually and re-run."
+            )
 
 
 def install_ollama(force: bool = False) -> None:
@@ -194,48 +217,6 @@ def check_gpu() -> None:
             )
 
 
-def verify_ollama_gpu(model: str) -> None:
-    """Confirm Ollama actually runs the model on the GPU, not CPU."""
-    logger.info("Warming up model %s to verify GPU usage...", model)
-    warm = subprocess.run(
-        ["ollama", "run", model, "say hi"],
-        capture_output=True,
-        text=True,
-        timeout=600,
-    )
-    if warm.returncode != 0:
-        logger.warning("Model warm-up failed: %s", (warm.stderr or "").strip())
-
-    ps = subprocess.run(["ollama", "ps"], capture_output=True, text=True)
-    out = ps.stdout or ""
-    if "GPU" in out and "CPU" not in out:
-        logger.info("Ollama is using the GPU. ✓")
-    elif "CPU" in out:
-        logger.warning(
-            "Ollama is running the model on CPU only. On Colab you must use a CUDA >= 12 "
-            "runtime image (Runtime ▸ Change runtime type ▸ CUDA 12.x) and a T4 GPU, "
-            "otherwise Ollama silently falls back to CPU. Consider --remote (OpenRouter) "
-            "if the GPU driver cannot be upgraded."
-        )
-    else:
-        logger.info("GPU status could not be confirmed from `ollama ps`; continuing.")
-
-
-# --------------------------------------------------------------------------- #
-# Model pull
-# --------------------------------------------------------------------------- #
-def pull_model(model: str) -> None:
-    res = subprocess.run(["ollama", "list"], capture_output=True, text=True)
-    if model in (res.stdout or ""):
-        logger.info("Model %s already present; skipping pull.", model)
-        return
-    logger.info("Pulling Ollama model %s (this may take a while, ~5GB)...", model)
-    try:
-        subprocess.run(["ollama", "pull", model], check=True)
-    except subprocess.CalledProcessError as e:
-        raise SystemExit(f"Failed to pull model {model}: {e}")
-
-
 # --------------------------------------------------------------------------- #
 # Entry point
 # --------------------------------------------------------------------------- #
@@ -257,6 +238,11 @@ def main(argv=None):
         help="Skip pulling the model (download happens later in the training run).",
     )
     parser.add_argument(
+        "--no-verify-gpu",
+        action="store_true",
+        help="Skip the GPU warm-up/verification step (useful when troubleshooting).",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Reinstall Ollama even if already present.",
@@ -266,9 +252,10 @@ def main(argv=None):
     install_ollama(force=args.force)
     ensure_ollama_running()
     check_gpu()
-    verify_ollama_gpu(args.model)
     if not args.no_pull:
         pull_model(args.model)
+    if not args.no_verify_gpu:
+        verify_ollama_gpu(args.model)
 
     logger.info("Setup complete. Next: simple_ai_autoresearch_train --local ...")
 

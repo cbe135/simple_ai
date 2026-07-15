@@ -21,6 +21,7 @@ overlap.
 from __future__ import annotations
 
 import atexit
+import json
 import logging
 import os
 import re
@@ -30,6 +31,7 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 import yaml
@@ -172,31 +174,97 @@ def start_ollama() -> None:
         raise RuntimeError("Ollama server did not become reachable in time")
 
 
-def ensure_ollama_model(model: str) -> None:
-    """Pull the model if missing, then warm it up and check GPU availability."""
-    res = subprocess.run(["ollama", "list"], capture_output=True, text=True)
-    if model not in res.stdout:
-        logger.info("Pulling Ollama model %s (this may take a while)...", model)
-        subprocess.run(["ollama", "pull", model], check=True)
+def _stream_command(cmd, timeout=None) -> int:
+    """Run a command and stream its combined (stdout+stderr) output to the log.
 
-    # Warm up so the model is loaded and we can inspect the processor.
-    warm = subprocess.run(
-        ["ollama", "run", model, "say hi"],
-        capture_output=True,
+    Unlike ``subprocess.run(..., capture_output=True)`` this keeps the user
+    informed with live progress (e.g. the multi-GB Ollama download) instead of
+    appearing to hang with no output. Raises ``subprocess.CalledProcessError``
+    on a non-zero exit code.
+    """
+    logger.info("Running: %s", " ".join(cmd))
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
-        timeout=300,
+        bufsize=1,
     )
-    if warm.returncode != 0:
-        logger.warning("Ollama warm-up failed: %s", warm.stderr.strip())
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        line = line.rstrip("\n")
+        if line:
+            logger.info("[ollama] %s", line)
+    proc.wait(timeout=timeout)
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd)
+    return proc.returncode
+
+
+def pull_model(model: str) -> None:
+    """Pull ``model`` if not already present, streaming download progress."""
+    res = subprocess.run(["ollama", "list"], capture_output=True, text=True)
+    if model in (res.stdout or ""):
+        logger.info("Model %s already present; skipping pull.", model)
+        return
+    logger.info("Pulling Ollama model %s (this may take a while, ~5GB)...", model)
+    try:
+        _stream_command(["ollama", "pull", model])
+    except subprocess.CalledProcessError as e:
+        raise SystemExit(f"Failed to pull model {model}: {e}")
+
+
+def verify_ollama_gpu(model: str, keep_alive: str = "5m") -> None:
+    """Confirm Ollama runs ``model`` on the GPU, not CPU.
+
+    Uses the non-interactive ``/api/generate`` REST endpoint (with
+    ``keep_alive`` so the model stays resident long enough for ``ollama ps`` to
+    report it) instead of the interactive ``ollama run`` CLI, which can appear
+    to hang when there is no TTY.
+    """
+    logger.info("Warming up model %s to verify GPU usage...", model)
+    payload = json.dumps(
+        {
+            "model": model,
+            "prompt": "say hi",
+            "stream": False,
+            "keep_alive": keep_alive,
+        }
+    ).encode()
+    url = f"http://localhost:{OLLAMA_PORT}/api/generate"
+    req = urllib.request.Request(
+        url, data=payload, headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=600) as resp:
+            body = resp.read().decode()
+        try:
+            reply = json.loads(body).get("response", "")
+            logger.info("Model responded: %s", (reply or "").strip()[:80])
+        except json.JSONDecodeError:
+            pass
+    except Exception as e:  # noqa: BLE001 - surface as a warning, keep going
+        logger.warning("Model warm-up via API failed: %s", e)
 
     ps = subprocess.run(["ollama", "ps"], capture_output=True, text=True)
-    if "CPU" in ps.stdout and "GPU" not in ps.stdout:
+    out = ps.stdout or ""
+    if "GPU" in out and "CPU" not in out:
+        logger.info("Ollama is using the GPU. ✓")
+    elif "CPU" in out:
         logger.warning(
             "Ollama is running the model on CPU only. On Colab T4 you must use a "
             "CUDA >= 12 runtime image (Runtime > Change runtime type > CUDA 12.x), "
             "otherwise Ollama silently falls back to CPU. Consider using OpenRouter "
             "(remove --local) if the GPU driver cannot be upgraded."
         )
+    else:
+        logger.info("GPU status could not be confirmed from `ollama ps`; continuing.")
+
+
+def ensure_ollama_model(model: str) -> None:
+    """Pull the model if missing, then warm it up and check GPU availability."""
+    pull_model(model)
+    verify_ollama_gpu(model)
 
 
 def stop_ollama() -> None:
