@@ -41,6 +41,11 @@ whole file must be valid YAML and self-contained.
 - Do not invent new top-level sections. Stick to the schema described below.
 - Changes should be conservative and likely-valid; a config that crashes wastes
   the whole training budget. Prefer small, well-understood tweaks.
+- The valid `--modality` choices are the **keys of the `modalities` section**
+  in `config.yaml`. You may tune the transforms inside a `modalities.<name>`
+  block, but keep them appropriate to that imaging type (see below). Do **not**
+  rename, delete, or add modality keys unless you also change the `--modality`
+  flag — an unknown modality makes training fail.
 
 ## Config schema (reference)
 
@@ -84,11 +89,91 @@ training:
 
 threshold: 0.5
 
-transforms:                     # optional extra MONAI transforms (advanced)
+modalities:                     # per-modality transform presets (keys = valid --modality)
+  ct:
+    preprocess:                 # MONAI bundle _target_ list, cached
+      - _target_: monai.transforms.Resized
+        keys: "@data::resize_keys"   # ["image","mask"] if masks, else ["image"]
+        spatial_size: "@data::spatial_size"
+      - _target_: monai.transforms.ScaleIntensityRanged   # CT windowing
+        keys: ["image"]
+        a_min: "@data::a_min"
+        a_max: "@data::a_max"
+        b_min: 0.0
+        b_max: 1.0
+        clip: true
+      - _target_: monai.transforms.MaskIntensityd
+        keys: ["image"]
+        mask_key: "mask"
+        _disabled_: "@data::mask_disabled"   # skipped automatically when no masks
+      - _target_: monai.transforms.RepeatChanneld   # build multi-channel input
+        keys: ["image"]
+        repeats: "@data::repeats"
+    augmentation:               # MONAI bundle _target_ list, train only
+      - _target_: monai.transforms.RandAffined
+        keys: ["image"]
+        rotate_range: "@data::rotate_range"
+        shear_range: "@data::shear_range"
+        translate_range: "@data::translate_range"
+        scale_range: "@data::scale_range"
+        prob: "@data::affine_prob"
+        padding_mode: "border"
+      - _target_: monai.transforms.RandFlipd
+        keys: ["image"]
+        spatial_axis: "@data::spatial_axis"
+        prob: "@data::flip_prob"
+      - _target_: monai.transforms.RandGaussianNoiseD
+        keys: ["image"]
+  mri:
+    preprocess:
+      - _target_: monai.transforms.Resized
+        keys: ["image"]
+        spatial_size: "@data::spatial_size"
+      - _target_: monai.transforms.RepeatChanneld
+        keys: ["image"]
+        repeats: "@data::repeats"
+    augmentation: [ ...same as ct... ]
+  xray:
+    preprocess: [ ...Resized + RepeatChanneld... ]
+    augmentation: [ ...same as ct... ]
+  color:
+    preprocess:
+      - _target_: monai.transforms.Resized
+        keys: ["image"]
+        spatial_size: "@data::spatial_size"
+    augmentation: [ ...same as ct... ]   # no RepeatChannel: RGB already 3ch
+
+transforms:                     # optional extra MONAI transforms (advanced), appended AFTER the modality preset
   loaders_extra: []
   preprocess_extra: []
   augmentation_extra: []
 ```
+
+### Modality-specific transforms (important)
+
+Each `modalities.<name>` block is the **transform recipe for one imaging type**.
+These are modality-specific and must only be adjusted to fit that modality's
+physical / intensity characteristics — do **not** apply a transform that
+contradicts the imaging type:
+
+- **CT** needs intensity windowing (`ScaleIntensityRanged` with `a_min`/`a_max`)
+  because Hounsfield units span a huge range; single-channel volumes need
+  `RepeatChanneld` to form a multi-channel input.
+- **MRI / X-ray** (single-channel) also use `RepeatChanneld`; they do **not** use
+  CT-style Hounsfield windowing.
+- **color** (natural RGB) already has 3 channels, so it must **not** use
+  `RepeatChanneld`, and it must not be windowed like CT.
+- `MaskIntensityd` is auto-skipped (`_disabled_`) when the dataset has no masks,
+  so you normally never need to touch it.
+
+Use **nnU-Net** (https://github.com/MIC-DKFZ/nnUNet) as the reference design: it
+selects normalization per modality — CT is clipped to a fixed intensity window
+(percentiles), while MRI / PET / other modalities use dataset-wise z-score
+normalization per channel, and resampling / augmentation follow from the
+modality. Follow the same principle: keep each modality's transforms
+appropriate to its imaging type. Prefer editing `data.*` hyperparameters
+(`a_min`/`a_max`, `spatial_size`, augmentation ranges) over restructuring a
+modality's transform list.
 
 ## What tends to help (exploration ideas)
 

@@ -2,11 +2,12 @@
 
 ## 6-1. 增強方式說明
 
-增強由 `src/transforms.py` 的 `get_augmentation(args, dataset_info)` 產生，
-並只會出現在**訓練** transform（驗證 / 測試不增強）。設計上刻意**不使用 crop**，
-以保留影像完整資訊。
+增強由 `config.yaml` 的 `modalities.<modality>.augmentation` 定義
+（MONAI bundle `_target_` 清單），並由 `src/transforms.py` 的
+`get_modality_pipeline` 讀出；只會出現在**訓練** transform
+（驗證 / 測試不增強）。設計上刻意**不使用 crop**，以保留影像完整資訊。
 
-包含的 transform：
+預設每一個 modality 的 augmentation 清單包含：
 
 - `RandAffined`：依 `args` 中的 `rotate_range` / `shear_range` /
   `translate_range` / `scale_range` / `spatial_axis` 做隨機仿射，
@@ -14,15 +15,23 @@
 - `RandFlipd`：`flip_prob`（預設 `0.5`）做隨機水平翻轉。
 - `RandGaussianNoised`：**永遠**啟用，對影像加微小高斯雜訊，提升穩健性。
 
+這些都寫在 `config.yaml` 的 `modalities.<modality>.augmentation` 裡，
+調整時直接改 config（見 `03-configuration.md` 與 `src/program.md`）。
+
 ```python
-from src.transforms import get_augmentation, build_train_transform
+from src.transforms import (
+    get_modality_pipeline, build_train_transform, build_val_transform,
+)
 
-aug = get_augmentation(args, {"modality": modality})
+dataset_info = {"modality": modality, "spatial_dims": spatial_dims}
+preprocess, augmentation = get_modality_pipeline(args, data_dicts[:1], dataset_info)
 
-# 訓練 transform = loaders + preprocess + augmentation + 額外
-train_tf = build_train_transform(args, data_dicts[:1], {"modality": modality})
-# 驗證 transform = loaders + preprocess + 額外（沒有 augmentation）
-val_tf   = build_val_transform(args, data_dicts[:1], {"modality": modality})
+# 訓練 transform = loaders + loaders_extra + preprocess + preprocess_extra
+#                  + augmentation + augmentation_extra + strip_meta
+train_tf = build_train_transform(args, data_dicts[:1], dataset_info)
+# 驗證 transform = loaders + loaders_extra + preprocess + preprocess_extra
+#                  + strip_meta（沒有 augmentation）
+val_tf   = build_val_transform(args, data_dicts[:1], dataset_info)
 ```
 
 ## 6-2. 資料集與 DataLoader
@@ -56,4 +65,4 @@ transforms:
       sigma_x: [0.5, 1.0]
 ```
 
-它會被附加在 preset 增強之後。更多欄位請見 `03-configuration.md`。
+它會被附加在該 modality 的 preset 增強之後。更多欄位請見 `03-configuration.md`。

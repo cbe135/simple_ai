@@ -1,13 +1,15 @@
 # 3. 設定參數
 
 我們使用一個 YAML 設定檔（預設 `config.yaml`）來管理所有參數，傳入各模組的
-`args`。參數分為幾個主要區塊：`environ`、`data`、`training`、`threshold`、`transforms`。
+`args`。參數分為幾個主要區塊：`environ`、`data`、`training`、`threshold`、
+`modalities`、`transforms`。
 
-> **重要**：`modality`（`ct` / `mri` / `xray` / `color`）**不是**寫在 `config.yaml` 裡，
-> 也不再寫在 `data_list.yaml` 裡，而是在訓練時用 `--modality` 參數傳入。
-> 前處理（CT → 窗寬窗位 + mask + resize；X-ray → 只 resize）由此自動決定。
-> 這就是「資料驅動」的核心：改變 `--modality`，行為就跟著變，
-> 不需要改任何程式碼。
+> **重要**：`modality`（`ct` / `mri` / `xray` / `color`）**是** `config.yaml` 裡
+> `modalities` 區塊的**鍵**，每一個鍵定義該影像類型的完整前處理與增強
+> （MONAI bundle `_target_` 清單）。訓練時用 `--modality` 參數指定要使用哪一個
+> 鍵；`--modality` 的合法值就是 `modalities` 的所有鍵。
+> 這就是「資料驅動」的核心：在 `config.yaml` 調整 `modalities` 或 `data`，
+> 行為就跟著變，不需要改任何程式碼。
 
 ## config.yaml 結構
 

@@ -2,23 +2,23 @@
 
 ## 5-1. 前處理步驟說明
 
-前處理由 `src/transforms.py` 自動推導，不需要手寫 `if modality == ...`。
-核心函式如下：
+前處理由 `src/transforms.py` 依 `config.yaml` 的 `modalities` 區塊建構，
+不需要手寫 `if modality == ...`。核心函式如下：
 
 | 函式 | 作用 |
 |---|---|
 | `derive_reader(data_dicts_sample)` | 由第一個影像副檔名決定讀取器（`.nii.gz` → NIfTI，`jpg/png` → PIL） |
 | `derive_has_masks(data_dicts_sample)` | 由資料中是否含 `mask` 鍵決定是否啟用 mask |
 | `get_loaders(data_dicts_sample)` | 產生 `LoadImaged` / `EnsureTyped` + 可選 `LoadImaged(mask)` |
-| `get_preprocess(args, data_dicts_sample, dataset_info)` | 依 `modality` 產生前處理（`ct` → `ScaleIntensityRanged` 窗位 + 可選 `MaskIntensityd` + `Resized` + `RepeatChanneld`；`mri` / `xray` → `Resized` + `RepeatChanneld`；`color` → `Resized` 不含 `RepeatChanneld`） |
-| `get_augmentation(args, dataset_info)` | 產生增強 transform（見 06） |
-| `build_train_transform(args, data_dicts_sample, dataset_info)` | `loaders + preprocess + augmentation + 額外` 組成訓練 transform |
-| `build_val_transform(args, data_dicts_sample, dataset_info)` | `loaders + preprocess + 額外`（**不含**增強）組成驗證 transform |
+| `get_modality_pipeline(args, data_dicts_sample, dataset_info)` | 依 `modality` 從 `config.yaml` 的 `modalities.<modality>` 讀出 `preprocess` 與 `augmentation` 兩個 MONAI bundle 清單（如 `ct` → `ScaleIntensityRanged` 窗位 + 可選 `MaskIntensityd` + `Resized` + `RepeatChanneld`；`mri` / `xray` → `Resized` + `RepeatChanneld`；`color` → `Resized` 不含 `RepeatChanneld`）。`MaskIntensityd` 在沒有 mask 時由 `_disabled_` 自動跳過 |
+| `build_train_transform(args, data_dicts_sample, dataset_info)` | `loaders + loaders_extra + preprocess + preprocess_extra + augmentation + augmentation_extra + strip_meta` 組成訓練 transform |
+| `build_val_transform(args, data_dicts_sample, dataset_info)` | `loaders + loaders_extra + preprocess + preprocess_extra + strip_meta`（**不含**增強）組成驗證 transform |
 
 其中 `dataset_info` 是一個 dict：`{"modality": "ct", "spatial_dims": 2}`，
 `modality` 由 `--modality` 參數傳入；
 `spatial_dims` 則由 `transforms.derive_spatial_dims` **載入第一張影像後依其形狀自動判斷**
 （`.nii.gz` 既可能是 2D 也可能是 3D，無法只看副檔名）。
+前處理清單中的 `@data::*` 參考會在執行期依 `spatial_dims`、是否有 mask 等自動調整。
 
 > `spatial_size` 與各 affine 範圍（`rotate_range` / `shear_range` /
 > `translate_range` / `scale_range`）都會**自動補齊 / 截斷**到偵測到的維度：
@@ -34,12 +34,12 @@ CT 的 HU 值範圍很大，先用 `ScaleIntensityRanged`
 ```python
 from src.transforms import (
     derive_reader, derive_has_masks, get_loaders,
-    get_preprocess, build_train_transform, build_val_transform,
+    get_modality_pipeline, build_train_transform, build_val_transform,
 )
 
-dataset_info = {"modality": modality}
+dataset_info = {"modality": modality, "spatial_dims": spatial_dims}
 loaders = get_loaders(data_dicts[:1])
-preprocess = get_preprocess(args, data_dicts[:1], dataset_info)
+preprocess, augmentation = get_modality_pipeline(args, data_dicts[:1], dataset_info)
 train_tf = build_train_transform(args, data_dicts[:1], dataset_info)
 val_tf   = build_val_transform(args, data_dicts[:1], dataset_info)
 ```

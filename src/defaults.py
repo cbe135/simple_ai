@@ -6,6 +6,97 @@ Kept separate from ``main.py`` so CLIs (e.g. ``simple_ai_autoresearch_train
 """
 from numpy import pi
 
+
+def _augmentation_pipeline():
+    """MONAI bundle augmentation list shared by all modalities (train only)."""
+    return [
+        {
+            "_target_": "monai.transforms.RandAffined",
+            "keys": ["image"],
+            "rotate_range": "@data::rotate_range",
+            "shear_range": "@data::shear_range",
+            "translate_range": "@data::translate_range",
+            "scale_range": "@data::scale_range",
+            "prob": "@data::affine_prob",
+            "padding_mode": "border",
+        },
+        {
+            "_target_": "monai.transforms.RandFlipd",
+            "keys": ["image"],
+            "spatial_axis": "@data::spatial_axis",
+            "prob": "@data::flip_prob",
+        },
+        {
+            "_target_": "monai.transforms.RandGaussianNoiseD",
+            "keys": ["image"],
+        },
+    ]
+
+
+def _preprocess_ct():
+    return [
+        {
+            "_target_": "monai.transforms.Resized",
+            "keys": "@data::resize_keys",
+            "spatial_size": "@data::spatial_size",
+        },
+        {
+            "_target_": "monai.transforms.ScaleIntensityRanged",
+            "keys": ["image"],
+            "a_min": "@data::a_min",
+            "a_max": "@data::a_max",
+            "b_min": 0.0,
+            "b_max": 1.0,
+            "clip": True,
+        },
+        {
+            "_target_": "monai.transforms.MaskIntensityd",
+            "keys": ["image"],
+            "mask_key": "mask",
+            "_disabled_": "@data::mask_disabled",
+        },
+        {
+            "_target_": "monai.transforms.RepeatChanneld",
+            "keys": ["image"],
+            "repeats": "@data::repeats",
+        },
+    ]
+
+
+def _preprocess_single_channel():
+    """Resize + repeat-channel for single-channel volumes (mri, xray)."""
+    return [
+        {
+            "_target_": "monai.transforms.Resized",
+            "keys": ["image"],
+            "spatial_size": "@data::spatial_size",
+        },
+        {
+            "_target_": "monai.transforms.RepeatChanneld",
+            "keys": ["image"],
+            "repeats": "@data::repeats",
+        },
+    ]
+
+
+def _preprocess_color():
+    return [
+        {
+            "_target_": "monai.transforms.Resized",
+            "keys": ["image"],
+            "spatial_size": "@data::spatial_size",
+        },
+    ]
+
+
+MODALITIES = {
+    "ct": {"preprocess": _preprocess_ct(), "augmentation": _augmentation_pipeline()},
+    "mri": {"preprocess": _preprocess_single_channel(), "augmentation": _augmentation_pipeline()},
+    "xray": {"preprocess": _preprocess_single_channel(), "augmentation": _augmentation_pipeline()},
+    "color": {"preprocess": _preprocess_color(), "augmentation": _augmentation_pipeline()},
+}
+
+
 DEFAULT_ARGS = {
     "environ": {
         "config_file": "config.yaml",
@@ -41,4 +132,5 @@ DEFAULT_ARGS = {
         "num_classes": 1,
     },
     "threshold": 0.5,
+    "modalities": MODALITIES,
 }

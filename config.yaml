@@ -43,13 +43,128 @@ training:
 
 threshold: 0.5
 
-# Extra transforms (MONAI bundle format) appended to the auto-derived presets.
-# Each entry is a `_target_` dict; `@data.*` references the `data` section above.
-# Leave empty (default) to use only the auto-derived preset transforms.
+# Per-modality transform presets (MONAI bundle format). The keys of `modalities`
+# are the valid `--modality` choices. Each modality defines its full pipeline:
+#   preprocess   -> deterministic, cached (Resize / window / mask / repeat-channel)
+#   augmentation -> applied per-epoch on top of the cached items (train only)
+# Use MONAI bundle `_target_` dicts; `@data::*` references the `data` section above.
+# The pipeline is data-driven: MaskIntensityd is skipped when no masks exist
+# (`_disabled_: "@data::mask_disabled"`), and `resize_keys`/`spatial_size` are
+# adjusted at runtime to the image's spatial rank.
+#
+# Keep each modality's transforms appropriate to that imaging type (see
+# src/program.md). Example references: nnU-Net (https://github.com/MIC-DKFZ/nnUNet)
+# picks normalization per modality — CT is clipped to a fixed intensity window,
+# while MRI/PET use dataset-wise z-score normalization.
+modalities:
+  ct:
+    preprocess:
+      - _target_: monai.transforms.Resized
+        keys: "@data::resize_keys"
+        spatial_size: "@data::spatial_size"
+      - _target_: monai.transforms.ScaleIntensityRanged
+        keys: ["image"]
+        a_min: "@data::a_min"
+        a_max: "@data::a_max"
+        b_min: 0.0
+        b_max: 1.0
+        clip: true
+      - _target_: monai.transforms.MaskIntensityd
+        keys: ["image"]
+        mask_key: "mask"
+        _disabled_: "@data::mask_disabled"
+      - _target_: monai.transforms.RepeatChanneld
+        keys: ["image"]
+        repeats: "@data::repeats"
+    augmentation:
+      - _target_: monai.transforms.RandAffined
+        keys: ["image"]
+        rotate_range: "@data::rotate_range"
+        shear_range: "@data::shear_range"
+        translate_range: "@data::translate_range"
+        scale_range: "@data::scale_range"
+        prob: "@data::affine_prob"
+        padding_mode: "border"
+      - _target_: monai.transforms.RandFlipd
+        keys: ["image"]
+        spatial_axis: "@data::spatial_axis"
+        prob: "@data::flip_prob"
+      - _target_: monai.transforms.RandGaussianNoiseD
+        keys: ["image"]
+  mri:
+    preprocess:
+      - _target_: monai.transforms.Resized
+        keys: ["image"]
+        spatial_size: "@data::spatial_size"
+      - _target_: monai.transforms.RepeatChanneld
+        keys: ["image"]
+        repeats: "@data::repeats"
+    augmentation:
+      - _target_: monai.transforms.RandAffined
+        keys: ["image"]
+        rotate_range: "@data::rotate_range"
+        shear_range: "@data::shear_range"
+        translate_range: "@data::translate_range"
+        scale_range: "@data::scale_range"
+        prob: "@data::affine_prob"
+        padding_mode: "border"
+      - _target_: monai.transforms.RandFlipd
+        keys: ["image"]
+        spatial_axis: "@data::spatial_axis"
+        prob: "@data::flip_prob"
+      - _target_: monai.transforms.RandGaussianNoiseD
+        keys: ["image"]
+  xray:
+    preprocess:
+      - _target_: monai.transforms.Resized
+        keys: ["image"]
+        spatial_size: "@data::spatial_size"
+      - _target_: monai.transforms.RepeatChanneld
+        keys: ["image"]
+        repeats: "@data::repeats"
+    augmentation:
+      - _target_: monai.transforms.RandAffined
+        keys: ["image"]
+        rotate_range: "@data::rotate_range"
+        shear_range: "@data::shear_range"
+        translate_range: "@data::translate_range"
+        scale_range: "@data::scale_range"
+        prob: "@data::affine_prob"
+        padding_mode: "border"
+      - _target_: monai.transforms.RandFlipd
+        keys: ["image"]
+        spatial_axis: "@data::spatial_axis"
+        prob: "@data::flip_prob"
+      - _target_: monai.transforms.RandGaussianNoiseD
+        keys: ["image"]
+  color:
+    preprocess:
+      - _target_: monai.transforms.Resized
+        keys: ["image"]
+        spatial_size: "@data::spatial_size"
+    augmentation:
+      - _target_: monai.transforms.RandAffined
+        keys: ["image"]
+        rotate_range: "@data::rotate_range"
+        shear_range: "@data::shear_range"
+        translate_range: "@data::translate_range"
+        scale_range: "@data::scale_range"
+        prob: "@data::affine_prob"
+        padding_mode: "border"
+      - _target_: monai.transforms.RandFlipd
+        keys: ["image"]
+        spatial_axis: "@data::spatial_axis"
+        prob: "@data::flip_prob"
+      - _target_: monai.transforms.RandGaussianNoiseD
+        keys: ["image"]
+
+# Extra transforms (MONAI bundle format) appended AFTER the per-modality presets.
+# Each entry is a `_target_` dict; `@data::*` references the `data` section above.
+# Leave empty (default) to use only the modality preset transforms.
 #
 # loaders_extra     -> appended after LoadImaged / EnsureTyped
-# preprocess_extra  -> appended after Resize / window / MaskIntensity / RepeatChannel
-# augmentation_extra-> appended after RandAffine / RandFlip / GaussianNoise (train only)
+# preprocess_extra  -> appended after the modality's preprocess
+# augmentation_extra-> appended after the modality's augmentation (train only)
 #
 # Example:
 #   preprocess_extra:

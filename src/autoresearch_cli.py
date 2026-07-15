@@ -26,7 +26,32 @@ import sys
 from logging import FileHandler, Formatter
 from pathlib import Path
 
-from yaml import safe_dump
+from yaml import safe_dump, safe_load
+
+
+def _config_path_from_argv(argv):
+    """Best-effort extraction of ``--config`` value from argv."""
+    for i, a in enumerate(argv):
+        if a == "--config" and i + 1 < len(argv):
+            return argv[i + 1]
+        if a.startswith("--config="):
+            return a.split("=", 1)[1]
+    return "config.yaml"
+
+
+def _modality_choices(config_path):
+    """Valid ``--modality`` values = keys of ``modalities`` in the config.
+
+    Falls back to the built-in set if the config is missing or has no
+    ``modalities`` section.
+    """
+    try:
+        with open(config_path) as f:
+            cfg = safe_load(f) or {}
+        mods = list((cfg.get("modalities") or {}).keys())
+        return mods or ["ct", "mri", "xray", "color"]
+    except Exception:
+        return ["ct", "mri", "xray", "color"]
 
 
 def main(argv=None):
@@ -50,12 +75,17 @@ def main(argv=None):
         prog="simple_ai_autoresearch_train",
         description="Autonomously improve classification training by editing config.yaml.",
     )
+    # Derive valid --modality choices from the config file's `modalities` keys.
+    modality_choices = _modality_choices(_config_path_from_argv(argv if argv is not None else sys.argv))
     parser.add_argument("--data-dir", default=None, help="Dataset directory for training.")
     parser.add_argument(
         "--modality",
         required=False,
-        choices=["ct", "mri", "xray", "color"],
-        help="Imaging modality (ct | mri | xray | color); passed through to training.",
+        choices=modality_choices,
+        help=(
+            "Imaging modality; must be a key of the `modalities` section in the "
+            "config file (passed through to training)."
+        ),
     )
     parser.add_argument("--config", default="config.yaml", help="Config YAML path (edited in place).")
     parser.add_argument("--experiments", default="experiments.tsv", help="TSV log of all runs.")

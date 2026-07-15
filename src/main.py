@@ -2,8 +2,8 @@
 CNN Classification Pipeline
 
 Entry point for end-to-end training. All behavior is driven by:
-  - config YAML (data source, hyperparameters)
-  - --modality flag (ct | mri | xray | color)
+  - config YAML (data source, hyperparameters, and per-modality transforms)
+  - --modality flag (must be a key of the `modalities` section in config.yaml)
   - data_list.yaml (`data` list of per-patient dicts; drives has_masks / reader)
 
 Usage:
@@ -17,7 +17,7 @@ import os
 from argparse import ArgumentParser
 from logging import getLogger, basicConfig, INFO, Formatter, FileHandler
 from os import path, getcwd, makedirs
-from sys import stdout, stderr, path as sys_path, excepthook
+from sys import stdout, stderr, path as sys_path, excepthook, argv
 from datetime import datetime
 
 sys_path.insert(0, path.dirname(path.dirname(path.abspath(__file__))))
@@ -79,6 +79,30 @@ def _deep_merge(base, override):
     return result
 
 
+def _config_path_from_argv():
+    """Best-effort extraction of ``--config`` value from ``sys.argv``."""
+    for i, a in enumerate(argv):
+        if a == "--config" and i + 1 < len(argv):
+            return argv[i + 1]
+        if a.startswith("--config="):
+            return a.split("=", 1)[1]
+    return "config.yaml"
+
+
+def _modality_choices(config_path):
+    """Valid ``--modality`` values = keys of ``modalities`` in the config.
+
+    Falls back to the built-in set if the config is missing or has no
+    ``modalities`` section.
+    """
+    try:
+        cfg = load_config(config_path)
+        mods = list((cfg.get("modalities") or {}).keys())
+        return mods or ["ct", "mri", "xray", "color"]
+    except Exception:
+        return ["ct", "mri", "xray", "color"]
+
+
 def main():
     import subprocess
     import traceback
@@ -111,6 +135,8 @@ def main():
     print(f">>> pipeline starting — commit={_commit}", flush=True)
 
     parser = ArgumentParser(description="CNN Classification Pipeline")
+    # Derive valid --modality choices from the config file's `modalities` keys.
+    modality_choices = _modality_choices(_config_path_from_argv())
     parser.add_argument(
         "--config",
         type=str,
@@ -130,8 +156,11 @@ def main():
         "--modality",
         type=str,
         required=True,
-        choices=["ct", "mri", "xray", "color"],
-        help="Imaging modality (ct | mri | xray | color); drives preprocessing.",
+        choices=modality_choices,
+        help=(
+            "Imaging modality; must be a key of the `modalities` section in the "
+            "config file (drives preprocessing/augmentation)."
+        ),
     )
     parser.add_argument(
         "--output-dir",
@@ -279,7 +308,7 @@ def main():
         build_train_transform,
         build_val_transform,
         build_preprocess_transform,
-        get_augmentation,
+        get_modality_pipeline,
         get_augmentation_extra,
         strip_image_meta,
     )
@@ -297,8 +326,9 @@ def main():
     train_transform = build_train_transform(args, data_dicts, dataset_info)
     val_transform = build_val_transform(args, data_dicts, dataset_info)
     preprocess_transform = build_preprocess_transform(args, data_dicts, dataset_info)
+    _, modality_augmentation = get_modality_pipeline(args, data_dicts, dataset_info)
     aug_transform = Compose(
-        get_augmentation(args, dataset_info)
+        modality_augmentation
         + get_augmentation_extra(args)
         + [strip_image_meta()]
     )

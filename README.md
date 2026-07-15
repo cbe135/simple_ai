@@ -2,8 +2,6 @@
 
 Multi-task CNN classification pipeline using MONAI + PyTorch + timm. **All behavior is data-driven** — no hardcoded task names. The pipeline reads configuration from YAML files and derives transform pipelines from the data itself.
 
-**2026 Winter — Last modified: 2025/12/17**
-
 ## How It Works
 
 Every dataset ships with:
@@ -18,7 +16,7 @@ data_dir/
 The pipeline automatically derives:
 - **Reader** — from file extensions (`.nii.gz` → NIfTI, `.jpg`/`.png` → PIL)
 - **Has masks** — from whether `data_list.yaml` entries contain a `"mask"` key
-- **Preprocessing** — from the `--modality` flag (CT → windowing + mask + resize; X-ray → resize only)
+- **Preprocessing / augmentation** — from the `modalities` section in `config.yaml` (the keys of `modalities` are the valid `--modality` choices; e.g. CT → windowing + mask + resize, X-ray → resize only)
 
 No `if task == ...` anywhere in code.
 
@@ -91,15 +89,18 @@ data:
   # ...one dict per patient, with `label` given here
 ```
 
-**Accepted `--modality` values:** `ct`, `mri`, `xray`, `color`. There is **no** `ct2d` /
+**Accepted `--modality` values:** the keys of the `modalities` section in
+`config.yaml` (by default `ct`, `mri`, `xray`, `color`). Add a new key to
+`modalities` to support a new imaging type. There is **no** `ct2d` /
 `ct3d` / `mri2d` / `mri3d` distinction — the image *dimensionality* (2D vs
 3D volume) is derived automatically from the file extension
 (`.nii.gz` / `.nii` → NIfTI volume; `.jpg` / `.png` / … → 2D PIL). The
-`modality` only describes the *imaging type*.
+`modality` only describes the *imaging type*; the per-modality
+preprocessing/augmentation recipe lives in `config.yaml`.
 
 - `ct` → windowing (`ScaleIntensityRanged` using `a_min`/`a_max`) + optional
-  `MaskIntensityd` + `Resized`
-- `mri` / `xray` → `Resized` only
+  `MaskIntensityd` + `Resized` + `RepeatChanneld`
+- `mri` / `xray` → `Resized` + `RepeatChanneld`
 - `color` → `Resized` only, and channel-repeat is skipped (RGB already has 3
   channels)
 
@@ -136,7 +137,7 @@ python src/main.py --config CONFIG_FILE --data-dir DATA_DIR --modality MODALITY 
 |---|---|
 | `--config` | Path to config YAML (default: `config.yaml`) |
 | `--data-dir` | **Required.** Directory containing `data_list.yaml` (or `data_list.json`) with a `data` list, e.g. `/content/liver_data`. |
-| `--modality` | **Required.** Imaging modality (`ct` \| `mri` \| `xray` \| `color`); drives preprocessing. |
+| `--modality` | **Required.** Imaging modality; must be a key of the `modalities` section in `config.yaml` (default: `ct` \| `mri` \| `xray` \| `color`). Drives preprocessing/augmentation. |
 | `--output-dir` | Parent directory for run outputs. A timestamped subdirectory (`YYYYMMDD_HHMMSS`) is created here holding the weights, loss curve, config, and ROC PNGs. Defaults to the current working directory. |
 
 ### Examples
@@ -219,9 +220,13 @@ derived from the file extension, not the modality name.
 
 | Modality | Preprocessing |
 |---|---|
-| `ct` | Resize + CT windowing (`a_min`/`a_max`) + MaskIntensity + RepeatChannel |
+| `ct` | Resize + CT windowing (`a_min`/`a_max`) + MaskIntensity (if masks) + RepeatChannel |
 | `mri` / `xray` | Resize + RepeatChannel |
 | `color` | Resize only (no RepeatChannel; RGB already has 3 channels) |
+
+The exact recipe for each modality lives in the `modalities` section of
+`config.yaml` (MONAI bundle `_target_` lists). MaskIntensity is auto-skipped
+when the dataset has no masks.
 
 ### 2. Config YAML
 
@@ -398,18 +403,19 @@ All parameters are in the config YAML. Key parameters:
 | `lr` | 0.001 | Learning rate |
 | `timm_model` | resnet18 | Model architecture |
 
-### Transforms (extras)
+### Transforms (per-modality presets + extras)
 
-The pipeline builds a **preset** transform set automatically from your data (the `--modality` flag, whether masks exist, and file extensions). You can append your own MONAI transforms via the `transforms` block in the config, written in [MONAI bundle](https://docs.monai.io/en/stable/mb/config_syntax.html) format:
+The per-modality transform recipes (preprocessing + augmentation) live in the
+`modalities` section of `config.yaml`, written in [MONAI bundle](https://docs.monai.io/en/stable/mb/config_syntax.html) format as `_target_` lists. The keys of `modalities` are the valid `--modality` choices. You can append your own MONAI transforms on top via the `transforms` block (applied **after** the modality preset), also in bundle format:
 
 ```yaml
 transforms:
   loaders_extra: []        # after LoadImaged / EnsureTyped
-  preprocess_extra: []     # after Resize / window / MaskIntensity / RepeatChannel
-  augmentation_extra: []   # after RandAffine / RandFlip / GaussianNoise (train only)
+  preprocess_extra: []     # after the modality's preprocess
+  augmentation_extra: []   # after the modality's augmentation (train only)
 ```
 
-Example — add Gaussian smoothing to preprocessing (references `@data.*` from the config):
+Example — add Gaussian smoothing to preprocessing (references `@data::*` from the config):
 
 ```yaml
 transforms:
@@ -419,7 +425,7 @@ transforms:
       sigma_x: [0.5, 1.0]
 ```
 
-Use the fully-qualified `_target_` (e.g. `monai.transforms.RandFlipd`). Leave the lists empty to use only the presets.
+Use the fully-qualified `_target_` (e.g. `monai.transforms.RandFlipd`). Leave the lists empty to use only the modality presets.
 
 ## Autonomous Research (`autoresearch`)
 

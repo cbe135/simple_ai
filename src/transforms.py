@@ -1,24 +1,22 @@
 """
-Data-driven transforms. No hardcoded task names.
+Config-driven transforms. No hardcoded task names.
 
-Transform pipelines are built from:
-  - the `--modality` flag (ct | mri | xray | color)
-  - data_list.yaml structure (has_masks, reader)
-  - args (hyperparameters like spatial_size, a_min/a_max, repeats)
+Per-modality transform pipelines live in ``config.yaml`` under the ``modalities``
+section: each modality defines ``preprocess`` and ``augmentation`` as MONAI
+bundle ``_target_`` lists. The pipeline is still data-driven at the edges —
+``has_masks`` / ``spatial_dims`` are derived from the data at runtime and
+injected as ``@data.*`` references so modality transforms stay appropriate to
+the imaging type. The CLI ``--modality`` choices are the keys of ``modalities``.
 """
+import logging
 import os
 from monai.transforms import (
     Compose,
     EnsureTyped,
     LoadImaged,
-    MaskIntensityd,
-    RandAffined,
-    RandFlipd,
-    RandGaussianNoiseD,
-    RepeatChanneld,
-    Resized,
-    ScaleIntensityRanged,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def derive_reader(data_dicts_sample):
@@ -109,105 +107,87 @@ def get_loaders(data_dicts_sample):
     ]
 
 
-def get_preprocess(args, data_dicts_sample, dataset_info):
-    """Build preprocessing pipeline based on modality and data characteristics."""
-    modality = dataset_info.get("modality", "")
-    has_masks = derive_has_masks(data_dicts_sample)
-    mod = modality.lower()
+def prepare_transform_config(args, data_dicts_sample, dataset_info):
+    """Inject runtime-derived values into ``args['data']`` for MONAI bundle refs.
 
-    spatial_dims = dataset_info.get("spatial_dims") or len(args["data"]["spatial_size"])
-    spatial_size = _adjust_spatial_size(args["data"]["spatial_size"], spatial_dims)
-
-    steps = []
-
-    if mod == "ct":
-        # CT: resize → window → mask → repeat
-        keys = ["image"]
-        if has_masks:
-            keys.append("mask")
-        steps.append(Resized(keys=keys, spatial_size=spatial_size))
-        steps.append(
-            ScaleIntensityRanged(
-                keys=["image"],
-                a_min=float(args["data"]["a_min"]),
-                a_max=float(args["data"]["a_max"]),
-                b_min=0,
-                b_max=1,
-                clip=True,
-            )
-        )
-        if has_masks:
-            steps.append(MaskIntensityd(keys="image", mask_key="mask"))
-    else:
-        # Non-CT (xray, mri, color, ...): resize only
-        steps.append(
-            Resized(keys=["image"], spatial_size=spatial_size)
-        )
-
-    # Single-channel images are repeated to build a multi-channel input.
-    # Multi-channel images (e.g. RGB "color") already have their channels,
-    # so we skip the repeat.
-    if mod != "color":
-        steps.append(
-            RepeatChanneld(
-                keys=["image"], repeats=args["data"]["repeats"]
-            )
-        )
-
-    return steps
-
-
-def get_augmentation(args, dataset_info):
-    """Build augmentation pipeline. Modality-agnostic, driven by args."""
-    spatial_dims = dataset_info.get("spatial_dims") or len(args["data"]["rotate_range"])
-    rotate_range = _adjust_affine_range(args["data"]["rotate_range"], spatial_dims)
-    shear_range = _adjust_affine_range(args["data"]["shear_range"], spatial_dims)
-    translate_range = _adjust_affine_range(args["data"]["translate_range"], spatial_dims)
-    scale_range = _adjust_affine_range(args["data"]["scale_range"], spatial_dims)
-    cfg_axis = args["data"].get("spatial_axis") or []
-    spatial_axis = cfg_axis if len(cfg_axis) == spatial_dims else list(range(spatial_dims))
-
-    aug = [
-        RandAffined(
-            keys="image",
-            rotate_range=rotate_range,
-            shear_range=shear_range,
-            translate_range=translate_range,
-            scale_range=scale_range,
-            prob=float(args["data"]["affine_prob"]),
-            padding_mode="border",
-        ),
-    ]
-
-    # Flip is always applied (controlled by flip_prob)
-    aug.append(
-        RandFlipd(
-            keys="image",
-            spatial_axis=spatial_axis,
-            prob=float(args["data"]["flip_prob"]),
-        )
-    )
-
-    # Gaussian noise is always applied (controlled by prob in augmentation config)
-    aug.append(RandGaussianNoiseD(keys="image"))
-
-    return aug
-
-
-def _instantiate_bundle(args, key):
-    """Instantiate an extra transform list from config via MONAI ConfigParser.
-
-    The config section is a list of MONAI bundle `_target_` dicts. `@data.*`
-    references resolve against the rest of the config. Returns [] when empty.
+    The per-modality transform lists in ``config.yaml`` reference ``@data.*``
+    placeholders. Some must be derived from the actual data / its spatial rank
+    before the bundle config is parsed:
+      - ``spatial_dims``                 (2 or 3, from the first image)
+      - ``spatial_size``                 (padded/truncated to ``spatial_dims``)
+      - ``rotate_range`` etc.            (affine ranges padded to ``spatial_dims``)
+      - ``spatial_axis``                 (defaults to all axes when mis-sized)
+      - ``has_masks`` / ``mask_disabled``(from the data list)
+      - ``resize_keys``                  (include ``mask`` when masks exist)
     """
-    items = (args.get("transforms") or {}).get(key) or []
-    if not items:
+    data = args.setdefault("data", {})
+    spatial_dims = dataset_info.get("spatial_dims") or len(data.get("spatial_size", [0, 0]))
+    data["spatial_dims"] = spatial_dims
+    data["spatial_size"] = _adjust_spatial_size(data.get("spatial_size", []), spatial_dims)
+    for key in ("rotate_range", "shear_range", "translate_range", "scale_range"):
+        data[key] = _adjust_affine_range(data.get(key, []), spatial_dims)
+    cfg_axis = data.get("spatial_axis") or []
+    data["spatial_axis"] = cfg_axis if len(cfg_axis) == spatial_dims else list(range(spatial_dims))
+
+    has_masks = derive_has_masks(data_dicts_sample)
+    data["has_masks"] = has_masks
+    data["mask_disabled"] = not has_masks
+    data["resize_keys"] = ["image", "mask"] if has_masks else ["image"]
+
+
+def get_modality_pipeline(args, data_dicts_sample, dataset_info):
+    """Resolve the modality's ``preprocess`` / ``augmentation`` lists from config.
+
+    Returns ``(preprocess_list, augmentation_list)`` of instantiated MONAI
+    transforms, parsed from the MONAI bundle ``modalities.<modality>`` section
+    via :class:`monai.bundle.ConfigParser`. Runtime values are injected first by
+    :func:`prepare_transform_config`.
+    """
+    prepare_transform_config(args, data_dicts_sample, dataset_info)
+    modality = (dataset_info or {}).get("modality", "")
+    modalities = args.get("modalities") or {}
+    if not modalities:
+        raise ValueError(
+            "config has no 'modalities' section; cannot build transforms. "
+            "Add a 'modalities' mapping (keys are valid --modality choices)."
+        )
+    if modality not in modalities:
+        # Fallback (e.g. grad_cam invoked without a modality): use the first one.
+        fallback = next(iter(modalities))
+        logger.warning(
+            "Modality %r not declared in config.modalities; falling back to %r",
+            modality,
+            fallback,
+        )
+        modality = fallback
+
+    preprocess = _instantiate_bundle(args, f"modalities::{modality}::preprocess")
+    augmentation = _instantiate_bundle(args, f"modalities::{modality}::augmentation")
+    return preprocess, augmentation
+
+
+def _instantiate_bundle(args, path):
+    """Instantiate a MONAI bundle transform list from config at ``path``.
+
+    ``path`` uses MONAI's ``::`` separator, e.g. ``transforms::preprocess_extra``
+    or ``modalities::ct::preprocess``. The list entries are MONAI bundle
+    ``_target_`` dicts; ``@data::*`` references resolve against the rest of the
+    config. Disabled components (``_disabled_``) resolve to ``None`` and are
+    dropped. Returns [] when the section is missing or empty.
+    """
+    cur = args
+    for part in path.split("::"):
+        if not isinstance(cur, dict) or part not in cur:
+            return []
+        cur = cur[part]
+    if not cur:
         return []
 
     from monai.bundle import ConfigParser
 
-    cp = ConfigParser(config=args)
-    return cp.get_parsed_content(f"transforms.{key}")
+    resolved = ConfigParser(config=args).get_parsed_content(path)
+    # Components marked ``_disabled_`` resolve to None; drop them.
+    return [item for item in resolved if item is not None]
 
 
 def _strip_meta(data_dicts_sample):
@@ -231,27 +211,28 @@ def strip_image_meta():
 
 def get_loaders_extra(args):
     """Extra loader transforms appended after the auto-derived loaders."""
-    return _instantiate_bundle(args, "loaders_extra")
+    return _instantiate_bundle(args, "transforms::loaders_extra")
 
 
 def get_preprocess_extra(args):
-    """Extra preprocessing transforms appended after the auto-derived preprocess."""
-    return _instantiate_bundle(args, "preprocess_extra")
+    """Extra preprocessing transforms appended after the modality preprocess."""
+    return _instantiate_bundle(args, "transforms::preprocess_extra")
 
 
 def get_augmentation_extra(args):
-    """Extra augmentation transforms appended after the auto-derived augmentation."""
-    return _instantiate_bundle(args, "augmentation_extra")
+    """Extra augmentation transforms appended after the modality augmentation."""
+    return _instantiate_bundle(args, "transforms::augmentation_extra")
 
 
 def build_train_transform(args, data_dicts_sample, dataset_info):
-    """Build full training transform (presets + user extras from config)."""
+    """Build full training transform (modality preset + user extras from config)."""
+    preprocess, augmentation = get_modality_pipeline(args, data_dicts_sample, dataset_info)
     return Compose(
         get_loaders(data_dicts_sample)
         + get_loaders_extra(args)
-        + get_preprocess(args, data_dicts_sample, dataset_info)
+        + preprocess
         + get_preprocess_extra(args)
-        + get_augmentation(args, dataset_info)
+        + augmentation
         + get_augmentation_extra(args)
         + [_strip_meta(data_dicts_sample)]
     )
@@ -259,10 +240,11 @@ def build_train_transform(args, data_dicts_sample, dataset_info):
 
 def build_val_transform(args, data_dicts_sample, dataset_info):
     """Build validation/test transform (no augmentation)."""
+    preprocess, _ = get_modality_pipeline(args, data_dicts_sample, dataset_info)
     return Compose(
         get_loaders(data_dicts_sample)
         + get_loaders_extra(args)
-        + get_preprocess(args, data_dicts_sample, dataset_info)
+        + preprocess
         + get_preprocess_extra(args)
         + [_strip_meta(data_dicts_sample)]
     )
@@ -272,14 +254,15 @@ def build_preprocess_transform(args, data_dicts_sample, dataset_info):
     """Deterministic preprocessing only (no augmentation), for persistent caching.
 
     The output of this pipeline is what gets cached to disk. Augmentation is
-    kept separate (see ``get_augmentation``) and applied per-epoch on top of
+    kept separate (in ``get_modality_pipeline``) and applied per-epoch on top of
     the cached items, so the cache stays valid regardless of split changes or
     augmentation tweaks.
     """
+    preprocess, _ = get_modality_pipeline(args, data_dicts_sample, dataset_info)
     return Compose(
         get_loaders(data_dicts_sample)
         + get_loaders_extra(args)
-        + get_preprocess(args, data_dicts_sample, dataset_info)
+        + preprocess
         + get_preprocess_extra(args)
         + [_strip_meta(data_dicts_sample)]
     )
