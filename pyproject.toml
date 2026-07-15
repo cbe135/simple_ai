@@ -50,6 +50,7 @@ simple_ai_autoresearch_save = "src.autoresearch_save:main"
 simple_ai_vlm_train = "vlm.cli:train_cmd"
 simple_ai_vlm_infer = "vlm.cli:infer_cmd"
 simple_ai_vlm_save = "vlm.cli:save_cmd"
+simple_ai_git_pull = "src.git_helpers:main"
 
 [tool.setuptools.packages.find]
 include = ["src*", "vlm*"]
