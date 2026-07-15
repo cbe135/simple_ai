@@ -46,10 +46,7 @@ def infer(args, model, data_loader, details=False, device=None, details_path=Non
 
                     if details:
                         binary_pred = (pred >= thres).float()
-                        if hasattr(images, "meta") and images.meta:
-                            filename = images.meta["filename_or_obj"][i]
-                        else:
-                            filename = "unknown"
+                        filename = data["filename"][i]
                         line = (
                             f"{filename} mismatch: pred={binary_pred.item()}, "
                             f"label={label.item()}"

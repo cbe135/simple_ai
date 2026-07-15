@@ -281,6 +281,11 @@ def main():
     from src.data import load_data_list
 
     data_dicts = load_data_list(args, data_dir)
+    # Carry the source filename through transforms + the persistent cache so
+    # evaluation can log it without relying on MetaTensor.meta (we use
+    # track_meta=False, so cached items are plain Tensors).
+    for d in data_dicts:
+        d.setdefault("filename", d.get("image"))
     modality = args_cli.modality
 
     # Derive properties from data

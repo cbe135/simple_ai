@@ -104,7 +104,7 @@ def get_loaders(data_dicts_sample):
 
     return [
         LoadImaged(keys=keys, ensure_channel_first=True, **reader_kw),
-        EnsureTyped(keys=["image", "label"]),
+        EnsureTyped(keys=["image", "label"], track_meta=False),
     ]
 
 
