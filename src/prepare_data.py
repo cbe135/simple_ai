@@ -109,6 +109,8 @@ def _download_via_gdown(data_dir, archive_name, file_ids):
     logger.info("Downloading data via gdown...")
     import gdown
 
+    os.makedirs(data_dir, exist_ok=True)
+
     for fid in file_ids:
         url = f"https://drive.google.com/uc?id={fid}"
         out = os.path.join(data_dir, f"{fid}.zip")
@@ -202,6 +204,8 @@ def prepare(args):
     ):
         logger.info(f"Data already prepared at {data_dir}; nothing to do.")
         return data_dir
+
+    os.makedirs(data_dir, exist_ok=True)
 
     target_dir = data_dir
     archive_name = f"{data_name}.{archive_fmt}"
