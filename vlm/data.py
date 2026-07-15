@@ -161,9 +161,13 @@ class VLMCollator:
             messages, tokenize=False, add_generation_prompt=add_generation_prompt
         )
         out = self.processor(text=text, images=[image], return_tensors="pt")
+        ids = out["input_ids"][0]
+        am = out.get("attention_mask")
+        if am is None:
+            am = self._torch.ones_like(ids)
         return {
-            "input_ids": out["input_ids"][0],
-            "attention_mask": out.get("attention_mask", self._torch.ones_like(out["input_ids"][0])),
+            "input_ids": ids.tolist(),
+            "attention_mask": am.tolist(),
             "pixel_values": out.get("pixel_values"),
             "image_grid_thw": out.get("image_grid_thw"),
         }
