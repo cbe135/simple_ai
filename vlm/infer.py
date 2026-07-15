@@ -48,6 +48,8 @@ def infer_hf(cfg, data_dir, split, adapter, base_dir, device, quantize, run_dir)
     model.eval()
     tokenizer = processor.tokenizer
 
+    logger.info("Running hf inference over %d %s samples on %s…", len(samples), split, device)
+
     yes_id = no_id = None
     is_binary = len(label_map) == 2
     if is_binary:
@@ -58,7 +60,9 @@ def infer_hf(cfg, data_dir, split, adapter, base_dir, device, quantize, run_dir)
                 no_id = tokenizer.convert_tokens_to_ids("no")
 
     rows, scores = [], []
-    for s in samples:
+    from tqdm import tqdm
+
+    for s in tqdm(samples, desc="infer"):
         image = Image.open(s["image"]).convert("RGB").resize((image_size, image_size))
         messages = build_messages(s["prompt"])
         inputs = processor.apply_chat_template(

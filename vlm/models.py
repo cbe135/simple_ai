@@ -52,6 +52,8 @@ def _load_base_model(model_id: str, cfg: dict, device: str, quantize: str):
     attn = cfg["model"].get("attn_implementation", "eager")
     from .registry import raise_if_gated
 
+    logger.info("Loading base model %s on %s (quantize=%s)…", model_id, device, quantize)
+
     try:
         processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=trust)
     except Exception as exc:
@@ -83,6 +85,11 @@ def _load_base_model(model_id: str, cfg: dict, device: str, quantize: str):
                 "LoRA (quantize=none).",
                 device,
             )
+        if device == "cpu":
+            logger.warning(
+                "Running on CPU: a 7B model loads in fp32 (~28GB) and is very slow / "
+                "may run out of memory. Enable a GPU runtime for 4-bit QLoRA."
+            )
         dtype = torch.bfloat16 if device == "cuda" else torch.float32
         try:
             model = AutoModelForImageTextToText.from_pretrained(
@@ -93,7 +100,8 @@ def _load_base_model(model_id: str, cfg: dict, device: str, quantize: str):
             )
         except Exception as exc:
             raise_if_gated(model_id, exc)
-        model.to(device)
+            model.to(device)
+    logger.info("Base model loaded on %s.", device)
     return model, processor
 
 
