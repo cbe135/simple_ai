@@ -163,7 +163,7 @@ class VLMCollator:
         out = self.processor(text=text, images=[image], return_tensors="pt")
         return {
             "input_ids": out["input_ids"][0],
-            "attention_mask": out.get("attention_mask", torch.ones_like(out["input_ids"][0])),
+            "attention_mask": out.get("attention_mask", self._torch.ones_like(out["input_ids"][0])),
             "pixel_values": out.get("pixel_values"),
             "image_grid_thw": out.get("image_grid_thw"),
         }
