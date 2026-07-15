@@ -9,7 +9,7 @@ data:
   train_percentage: 0.8
   val_percentage: 0.1
   test_percentage: 0.1
-  image_size: 896
+  image_size: 336
   num_workers: 4
   seed: 888
   stratify: true
@@ -24,7 +24,7 @@ label_map:
   4: "grade 4"
 training:
   num_epoch: 3
-  batch_size: 4
+  batch_size: 2
   lr: 1e-4
   lora_r: 8
   lora_alpha: 16
