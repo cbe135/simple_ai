@@ -307,6 +307,8 @@ def main():
     test_set = generate_dataset(args, test_dicts, val_transform)
 
     # Save pre/post transformation sample images to run_dir/samples/
+    from src.utils import plot_transform_result
+
     samples_dir = path.join(run_dir, "samples")
     makedirs(samples_dir, exist_ok=True)
     n_samples = min(4, len(data_dicts))
@@ -352,7 +354,7 @@ def main():
     )
 
     # Plot loss curves
-    from src.utils import plot_loss_curves, plot_transform_result
+    from src.utils import plot_loss_curves
 
     plot_loss_curves(args, record, save_path=path.join(run_dir, "loss_curve.png"))
 
