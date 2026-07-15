@@ -70,6 +70,7 @@ def _load_base_model(model_id: str, cfg: dict, device: str, quantize: str):
 
     use_4bit = quantize == "4bit" and device == "cuda"
     if use_4bit:
+        logger.info("Loading base model in 4-bit (QLoRA)…")
         bnb = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
@@ -158,6 +159,10 @@ def load_base(cfg: dict, base_dir: str | None = None, device: str | None = None,
 def load_for_training(cfg: dict, base_dir: str | None = None, device: str | None = None,
                       quantize: str | None = None):
     model, processor, device = load_base(cfg, base_dir, device, quantize)
+    quantize_eff = (quantize or cfg["model"].get("quantize", "4bit")).lower()
+    if quantize_eff == "4bit":
+        from peft import prepare_model_for_kbit_training
+        model = prepare_model_for_kbit_training(model)
     model = apply_lora(model, cfg)
     model.print_trainable_parameters() if hasattr(model, "print_trainable_parameters") else None
     return model, processor, device

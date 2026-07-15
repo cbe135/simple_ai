@@ -86,6 +86,7 @@ def train_pipeline(cfg: dict, data_dir, base_dir=None, device=None, quantize=Non
         save_strategy="epoch",
         eval_strategy="epoch",
         save_total_limit=1,
+        gradient_checkpointing=True,
         report_to="none",
         bf16=device == "cuda",
         fp16=False,
