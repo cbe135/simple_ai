@@ -318,6 +318,7 @@ def main():
         build_preprocess_transform,
         get_augmentation,
         get_augmentation_extra,
+        strip_image_meta,
     )
     from monai.transforms import Compose
 
@@ -333,7 +334,11 @@ def main():
     train_transform = build_train_transform(args, data_dicts, dataset_info)
     val_transform = build_val_transform(args, data_dicts, dataset_info)
     preprocess_transform = build_preprocess_transform(args, data_dicts, dataset_info)
-    aug_transform = Compose(get_augmentation(args, dataset_info) + get_augmentation_extra(args))
+    aug_transform = Compose(
+        get_augmentation(args, dataset_info)
+        + get_augmentation_extra(args)
+        + [strip_image_meta()]
+    )
 
     # Persistent transform cache (auto-isolated by preprocessing-config hash).
     cache_dir = resolve_cache_dir(args, data_dir, preprocess_transform)

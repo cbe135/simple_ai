@@ -125,7 +125,7 @@ def get_preprocess(args, data_dicts_sample, dataset_info):
         keys = ["image"]
         if has_masks:
             keys.append("mask")
-        steps.append(Resized(keys=keys, spatial_size=spatial_size, track_meta=False))
+        steps.append(Resized(keys=keys, spatial_size=spatial_size))
         steps.append(
             ScaleIntensityRanged(
                 keys=["image"],
@@ -134,15 +134,14 @@ def get_preprocess(args, data_dicts_sample, dataset_info):
                 b_min=0,
                 b_max=1,
                 clip=True,
-                track_meta=False,
             )
         )
         if has_masks:
-            steps.append(MaskIntensityd(keys="image", mask_key="mask", track_meta=False))
+            steps.append(MaskIntensityd(keys="image", mask_key="mask"))
     else:
         # Non-CT (xray, mri, color, ...): resize only
         steps.append(
-            Resized(keys=["image"], spatial_size=spatial_size, track_meta=False)
+            Resized(keys=["image"], spatial_size=spatial_size)
         )
 
     # Single-channel images are repeated to build a multi-channel input.
@@ -151,7 +150,7 @@ def get_preprocess(args, data_dicts_sample, dataset_info):
     if mod != "color":
         steps.append(
             RepeatChanneld(
-                keys=["image"], repeats=args["data"]["repeats"], track_meta=False
+                keys=["image"], repeats=args["data"]["repeats"]
             )
         )
 
@@ -177,7 +176,6 @@ def get_augmentation(args, dataset_info):
             scale_range=scale_range,
             prob=float(args["data"]["affine_prob"]),
             padding_mode="border",
-            track_meta=False,
         ),
     ]
 
@@ -187,12 +185,11 @@ def get_augmentation(args, dataset_info):
             keys="image",
             spatial_axis=spatial_axis,
             prob=float(args["data"]["flip_prob"]),
-            track_meta=False,
         )
     )
 
     # Gaussian noise is always applied (controlled by prob in augmentation config)
-    aug.append(RandGaussianNoiseD(keys="image", track_meta=False))
+    aug.append(RandGaussianNoiseD(keys="image"))
 
     return aug
 
@@ -211,6 +208,25 @@ def _instantiate_bundle(args, key):
 
     cp = ConfigParser(config=args)
     return cp.get_parsed_content(f"transforms.{key}")
+
+
+def _strip_meta(data_dicts_sample):
+    """Final ``EnsureTyped(track_meta=False)`` that flattens a ``MetaTensor``
+    back to a plain ``Tensor`` after all other transforms have run.
+
+    This version of MONAI does not accept ``track_meta`` on spatial/augment
+    transforms (they re-wrap into ``MetaTensor``), so we strip meta once, at the
+    end of each pipeline, to keep cached/augmented items plain (and thus
+    collate-safe). ``mask`` is included when present.
+    """
+    has_masks = derive_has_masks(data_dicts_sample)
+    keys = ["image", "label"] + (["mask"] if has_masks else [])
+    return EnsureTyped(keys=keys, track_meta=False)
+
+
+def strip_image_meta():
+    """Image-only variant for the augmentation pipeline (augments ``image``)."""
+    return EnsureTyped(keys=["image"], track_meta=False)
 
 
 def get_loaders_extra(args):
@@ -237,6 +253,7 @@ def build_train_transform(args, data_dicts_sample, dataset_info):
         + get_preprocess_extra(args)
         + get_augmentation(args, dataset_info)
         + get_augmentation_extra(args)
+        + [_strip_meta(data_dicts_sample)]
     )
 
 
@@ -247,6 +264,7 @@ def build_val_transform(args, data_dicts_sample, dataset_info):
         + get_loaders_extra(args)
         + get_preprocess(args, data_dicts_sample, dataset_info)
         + get_preprocess_extra(args)
+        + [_strip_meta(data_dicts_sample)]
     )
 
 
@@ -263,4 +281,5 @@ def build_preprocess_transform(args, data_dicts_sample, dataset_info):
         + get_loaders_extra(args)
         + get_preprocess(args, data_dicts_sample, dataset_info)
         + get_preprocess_extra(args)
+        + [_strip_meta(data_dicts_sample)]
     )
