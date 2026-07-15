@@ -65,17 +65,30 @@ def _ensure_drive_mounted(drive_dir: str) -> None:
         )
 
 
+# Colab always mounts Google Drive at /content/drive.
+DRIVE_MOUNT_ROOT = "/content/drive"
+
+
 def _resolve_shortcut(path: str) -> str:
     """Resolve a Google Drive shortcut (symlink) to its real target.
 
-    On Colab, Drive shortcuts appear as symlinks (e.g. ``MyDrive/ollama_models``
-    -> ``drive/.shortcut-targets-by-id/<id>/ollama_models``). ``os.makedirs``
-    raises ``FileExistsError`` on a symlink even with ``exist_ok=True`` when the
-    target isn't a directory, so callers must resolve before creating.
+    On Colab, Drive shortcuts appear as symlinks whose target is *relative*,
+    e.g. ``MyDrive/ollama_models`` -> ``drive/.shortcut-targets-by-id/<id>/ollama_models``
+    where the leading ``drive`` is the **mount root**, not a subdir of the
+    symlink's parent. ``os.path.realpath`` would resolve that relative target
+    against the symlink's parent and produce a wrong, doubled path
+    (``/content/drive/MyDrive/drive/.shortcut-targets-by-id/...``). Re-root it
+    against the Drive mount root instead so Ollama writes into the actual shared
+    folder. For non-shortcut symlinks, fall back to ``os.path.realpath``.
     """
-    if os.path.islink(path):
-        return os.path.realpath(path)
-    return path
+    if not os.path.islink(path):
+        return path
+    target = os.readlink(path)
+    if ".shortcut-targets-by-id/" in target:
+        # Strip the leading "drive/" and re-root against the Drive mount root.
+        rel = target.split("drive/", 1)[-1]
+        return os.path.join(DRIVE_MOUNT_ROOT, rel)
+    return os.path.realpath(path)
 
 
 def resolve_models_dir(models_dir_arg=None, colab_default: bool = True) -> str:
@@ -131,7 +144,7 @@ def apply_models_dir(
     # writes into the actual folder; also creates the target if the shortcut
     # was dangling.
     if os.path.islink(models_dir):
-        resolved = os.path.realpath(models_dir)
+        resolved = _resolve_shortcut(models_dir)
         if not os.path.exists(resolved):
             logger.warning(
                 "Ollama models path %s is a Drive shortcut whose target does not "
