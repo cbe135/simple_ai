@@ -65,10 +65,10 @@ def infer_hf(cfg, data_dir, split, adapter, base_dir, device, quantize, run_dir)
     for s in tqdm(samples, desc="infer"):
         image = Image.open(s["image"]).convert("RGB").resize((image_size, image_size))
         messages = build_messages(s["prompt"])
-        inputs = processor.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=True,
-            return_dict=True, images=[image],
-        ).to(device)
+        prompt_text = processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = processor(text=prompt_text, images=[image], return_tensors="pt").to(device)
 
         with torch.inference_mode():
             if is_binary and yes_id is not None and no_id is not None:

@@ -157,13 +157,16 @@ class VLMCollator:
         self.pad_id = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
 
     def _tokenize(self, messages, image, add_generation_prompt: bool) -> dict:
-        return self.processor.apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=add_generation_prompt,
-            return_dict=True,
-            images=[image],
+        text = self.processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=add_generation_prompt
         )
+        out = self.processor(text=text, images=[image], return_tensors="pt")
+        return {
+            "input_ids": out["input_ids"][0],
+            "attention_mask": out.get("attention_mask", torch.ones_like(out["input_ids"][0])),
+            "pixel_values": out.get("pixel_values"),
+            "image_grid_thw": out.get("image_grid_thw"),
+        }
 
     def _pad(self, seqs, value):
         torch = self._torch
@@ -176,7 +179,7 @@ class VLMCollator:
 
     def __call__(self, batch):
         torch = self._torch
-        input_ids, labels, attn, pixel_values = [], [], [], []
+        input_ids, labels, attn, pixel_values, grids = [], [], [], [], []
         for ex in batch:
             full = self._tokenize(ex["messages"], ex["image"], add_generation_prompt=False)
             prompt_len = len(self._tokenize(ex["user_messages"], ex["image"], add_generation_prompt=True)["input_ids"])
@@ -190,10 +193,13 @@ class VLMCollator:
             attn.append(full.get("attention_mask", [1] * len(ids)))
             pv = full.get("pixel_values")
             pixel_values.append(pv if pv is not None else torch.zeros(1))
+            g = full.get("image_grid_thw")
+            grids.append(g if g is not None else torch.zeros(1, 3, dtype=torch.long))
 
         return {
             "input_ids": self._pad(input_ids, self.pad_id),
             "attention_mask": self._pad(attn, 0),
             "labels": self._pad(labels, -100),
             "pixel_values": torch.cat(pixel_values, dim=0) if pixel_values[0].dim() > 0 else None,
+            "image_grid_thw": torch.cat(grids, dim=0) if grids[0].dim() > 0 else None,
         }

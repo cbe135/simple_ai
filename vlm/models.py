@@ -30,10 +30,19 @@ def auto_device() -> str:
 
 
 def resolve_base_dir(model_id: str, base_dir: str | None) -> str:
-    """If ``base_dir`` holds a cached copy of ``model_id``, use it; else Hub id."""
-    if base_dir:
-        cached = Path(base_dir) / model_id.replace("/", "--")
-        if cached.exists():
+    """If ``base_dir`` (or the default models dir) holds a cached copy of
+    ``model_id``, use it; else fall back to the Hub id."""
+    candidates = [base_dir] if base_dir else []
+    try:
+        from .save import default_models_dir
+        candidates.append(str(default_models_dir()))
+    except Exception:
+        pass
+    for d in candidates:
+        if not d:
+            continue
+        cached = Path(d) / model_id.replace("/", "--")
+        if cached.exists() and any(cached.iterdir()):
             logger.info("Loading base model from cache: %s", cached)
             return str(cached)
     return model_id
