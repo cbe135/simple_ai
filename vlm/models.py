@@ -50,7 +50,12 @@ def _load_base_model(model_id: str, cfg: dict, device: str, quantize: str):
 
     trust = bool(cfg["model"].get("trust_remote_code", False))
     attn = cfg["model"].get("attn_implementation", "eager")
-    processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=trust)
+    from .registry import raise_if_gated
+
+    try:
+        processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=trust)
+    except Exception as exc:
+        raise_if_gated(model_id, exc)
 
     use_4bit = quantize == "4bit" and device == "cuda"
     if use_4bit:
@@ -60,13 +65,16 @@ def _load_base_model(model_id: str, cfg: dict, device: str, quantize: str):
             bnb_4bit_compute_dtype=torch.bfloat16,
             bnb_4bit_use_double_quant=True,
         )
-        model = AutoModelForImageTextToText.from_pretrained(
-            model_id,
-            quantization_config=bnb,
-            device_map="auto",
-            attn_implementation=attn,
-            trust_remote_code=trust,
-        )
+        try:
+            model = AutoModelForImageTextToText.from_pretrained(
+                model_id,
+                quantization_config=bnb,
+                device_map="auto",
+                attn_implementation=attn,
+                trust_remote_code=trust,
+            )
+        except Exception as exc:
+            raise_if_gated(model_id, exc)
     else:
         if quantize == "4bit":
             logger.warning(
@@ -76,12 +84,15 @@ def _load_base_model(model_id: str, cfg: dict, device: str, quantize: str):
                 device,
             )
         dtype = torch.bfloat16 if device == "cuda" else torch.float32
-        model = AutoModelForImageTextToText.from_pretrained(
-            model_id,
-            torch_dtype=dtype,
-            attn_implementation=attn,
-            trust_remote_code=trust,
-        )
+        try:
+            model = AutoModelForImageTextToText.from_pretrained(
+                model_id,
+                torch_dtype=dtype,
+                attn_implementation=attn,
+                trust_remote_code=trust,
+            )
+        except Exception as exc:
+            raise_if_gated(model_id, exc)
         model.to(device)
     return model, processor
 

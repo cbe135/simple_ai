@@ -14,19 +14,21 @@ convention from `src/`.
 
 | Task | Modality | Recommended VLM (fine-tune, VQA) | Specialist alternative |
 |---|---|---|---|
-| Atelectasis | Chest X-ray | `google/medgemma-4b-it` | `MusinguziDenis/PaliGemma-CXR` (CXR-native) |
-| Cardiomegaly | Chest X-ray | `google/medgemma-4b-it` | `PaliGemma-CXR` |
-| Colon_Polyps | Endoscopy crops | `google/medgemma-4b-it` (Kvasir/PolypGen) | CNNs still beat VLMs here; `EndoViT` encoder |
-| Melanoma | Skin lesion | `google/medgemma-4b-it` (ISIC) | `BiomedCLIP`, `MM-Skin/SkinVL` |
-| Diabetic Retinopathy | Retinal fundus | `google/medgemma-4b-it` (APTOS/IDRID) | `sStonemason/RET-CLIP` (SOTA retinal, CLIP-style) |
+| Atelectasis | Chest X-ray | `Qwen/Qwen2.5-VL-7B-Instruct` | `MusinguziDenis/PaliGemma-CXR` (CXR-native) |
+| Cardiomegaly | Chest X-ray | `Qwen/Qwen2.5-VL-7B-Instruct` | `PaliGemma-CXR` |
+| Colon_Polyps | Endoscopy crops | `Qwen/Qwen2.5-VL-7B-Instruct` (Kvasir/PolypGen) | CNNs still beat VLMs here; `EndoViT` encoder |
+| Melanoma | Skin lesion | `Qwen/Qwen2.5-VL-7B-Instruct` (ISIC) | `BiomedCLIP`, `MM-Skin/SkinVL` |
+| Diabetic Retinopathy | Retinal fundus | `Qwen/Qwen2.5-VL-7B-Instruct` (APTOS/IDRID) | `sStonemason/RET-CLIP` (SOTA retinal, CLIP-style) |
 
-**Backbone default:** `google/medgemma-4b-it` for all five. The SigLIP
-encoder was pre-trained on chest X-ray, dermatology, ophthalmology, and
-histopathology, so it works **zero-shot** across all five modalities (e.g.
-MedGemma 4B zero-shot: dermatology 71.8%, diabetic retinopathy 64.9%,
-histopathology 69.8%, cardiomegaly AUC 0.904). Fine-tuning is recommended for
-strong per-task accuracy. Swap the backbone by editing `model.model_id` in a
-config.
+**Backbone default:** `Qwen/Qwen2.5-VL-7B-Instruct` for all five — a strong,
+**non-gated** VLM (Apache-2.0) that runs with no Hugging Face login. For the
+best medical accuracy you can swap to `google/medgemma-4b-it` (gated — see
+"Gated models (MedGemma)" below): its SigLIP encoder was pre-trained on chest
+X-ray, dermatology, ophthalmology, and histopathology, so it works **zero-shot**
+across these modalities (e.g. MedGemma 4B zero-shot: dermatology 71.8%,
+diabetic retinopathy 64.9%, histopathology 69.8%, cardiomegaly AUC 0.904).
+Fine-tuning is recommended for strong per-task accuracy. Swap the backbone by
+editing `model.model_id` in a config.
 
 ## Install
 
@@ -43,13 +45,31 @@ Later `train`/`infer` runs load from that cache with `--base-dir` (or the
 
 ```bash
 # On Colab (after mounting Drive in a Python cell):
-simple_ai_vlm_save                          # caches google/medgemma-4b-it to Drive
-simple_ai_vlm_save --ollama                 # also caches the Ollama base (medgemma:4b)
+simple_ai_vlm_save                          # caches Qwen/Qwen2.5-VL-7B-Instruct to Drive
+simple_ai_vlm_save --ollama                 # also caches the Ollama base (qwen2.5vl:7b)
 
 # Local:
 simple_ai_vlm_save --models-dir /path/to/vlm_models
 export SIMPLE_AI_VLM_BASE_DIR=/path/to/vlm_models
 ```
+
+## Gated models (MedGemma)
+
+The default model (`Qwen/Qwen2.5-VL-7B-Instruct`) is **not** gated, so no login
+is required. If you switch `model.model_id` to `google/medgemma-4b-it` for
+higher medical accuracy, it is **gated** on Hugging Face — you must grant access
+once, or `simple_ai_vlm_save` / `simple_ai_vlm_infer` will fail with
+`GATED MODEL ACCESS DENIED ... (HTTP 401 Unauthorized)` and print these exact
+steps:
+
+1. Visit https://huggingface.co/google/medgemma-4b-it and click
+   **"Agree and access repository"** to accept its license (needs a free HF
+   account).
+2. Authenticate in the environment where you run the command (one of):
+   - `huggingface-cli login` (then paste your token), or
+   - `export HF_TOKEN=hf_xxx` (token from https://huggingface.co/settings/tokens).
+   The token's account must be the one that accepted the license.
+3. Re-run `simple_ai_vlm_save` (to cache) and then `simple_ai_vlm_infer`.
 
 ## Fine-tune (one task)
 
@@ -112,7 +132,7 @@ The `label` integer maps to the answer text via `label_map` in the config
 | `model.model_id` | Hugging Face base model id |
 | `model.ollama_model` | Ollama base tag (ollama backend only) |
 | `model.quantize` | `4bit` (QLoRA, CUDA) or `none` (pure LoRA) |
-| `data.image_size` | Images are resized to this (MedGemma expects 896) |
+| `data.image_size` | Images are resized to this (896 works for MedGemma; Qwen accepts variable sizes) |
 | `prompt` | VQA template; `{modality}`/`{condition}` substituted |
 | `modality` / `condition` | substituted into `prompt` |
 | `label_map` | int label → answer string the VLM generates/parses |
@@ -120,8 +140,10 @@ The `label` integer maps to the answer text via `label_map` in the config
 
 ## Notes
 
-- **License:** MedGemma is released under the Health AI Developer Foundations
-  terms of use — research / non-clinical. Not a medical device.
+- **License:** The default model `Qwen/Qwen2.5-VL-7B-Instruct` is Apache-2.0.
+  If you instead use `google/medgemma-4b-it`, it is released under the Health
+  AI Developer Foundations terms of use — research / non-clinical. Not a
+  medical device.
 - **GGUF/Ollama fine-tune serving:** fine-tuned LoRA adapters are served via
   Hugging Face directly. Exporting a *fine-tuned* model to Ollama GGUF (merge +
   `llama.cpp` convert) is intentionally out of scope; the Ollama backend is for

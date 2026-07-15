@@ -9,8 +9,38 @@ them elsewhere.
 from __future__ import annotations
 
 # Default backbone across all 5 tasks (one code path, swappable via config).
-DEFAULT_MODEL_ID = "google/medgemma-4b-it"
-DEFAULT_OLLAMA_MODEL = "medgemma:4b"
+# Non-gated, works with no Hugging Face login.
+DEFAULT_MODEL_ID = "Qwen/Qwen2.5-VL-7B-Instruct"
+DEFAULT_OLLAMA_MODEL = "qwen2.5vl:7b"
+
+
+def gated_access_help(model_id: str) -> str:
+    """Exact steps to get through a Hugging Face gated-repo 401."""
+    return (
+        f"\nGATED MODEL ACCESS DENIED: {model_id} (HTTP 401 Unauthorized)\n"
+        "This model is gated on Hugging Face. To use it you must:\n"
+        "  1. Visit https://huggingface.co/" + model_id + " and click "
+        '"Agree and access repository" to accept its license\n'
+        "     (requires a free Hugging Face account).\n"
+        "  2. Authenticate in THIS environment (one of):\n"
+        "       huggingface-cli login        # then paste your token when prompted\n"
+        "       export HF_TOKEN=hf_xxx       # token from "
+        "https://huggingface.co/settings/tokens\n"
+        "     The token's account must be the one that accepted the license.\n"
+        "  3. Re-run this command.\n"
+        "The default model (Qwen/Qwen2.5-VL-7B-Instruct) is NOT gated and needs no "
+        "login.\n"
+        "To switch, set model.model_id in your config (or pass --model-id to "
+        "simple_ai_vlm_save).\n"
+    )
+
+
+def raise_if_gated(model_id: str, exc: Exception):
+    """Re-raise as a clear SystemExit if ``exc`` is a gated/401 access error."""
+    s = str(exc).lower()
+    if any(k in s for k in ("gated", "401", "unauthorized", "restricted")):
+        raise SystemExit(gated_access_help(model_id))
+    raise
 
 # task -> (modality, condition, label_map, prompt, specialist note)
 TASKS = {

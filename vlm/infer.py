@@ -136,7 +136,7 @@ def infer_pipeline(cfg, data_dir, split="test", adapter=None, base_dir=None,
     run_dir = run_dir / "vlm"
 
     if backend == "ollama":
-        return infer_ollama(cfg, data_dir, split, cfg["model"].get("ollama_model", "medgemma:4b"), run_dir)
+        return infer_ollama(cfg, data_dir, split, cfg["model"].get("ollama_model", "qwen2.5vl:7b"), run_dir)
 
     adapter = Path(adapter) if adapter else None
     if adapter and not adapter.exists():

@@ -15,8 +15,8 @@ import yaml
 DEFAULT_CONFIG = {
     "task": "melanoma",
     "model": {
-        "model_id": "google/medgemma-4b-it",  # Hugging Face base (also the Drive-cached base)
-        "ollama_model": "medgemma:4b",         # used only by the Ollama inference backend
+        "model_id": "Qwen/Qwen2.5-VL-7B-Instruct",  # non-gated default; swap to google/medgemma-4b-it (gated) for medical accuracy
+        "ollama_model": "qwen2.5vl:7b",         # used only by the Ollama inference backend
         "quantize": "4bit",                     # "4bit" (QLoRA, CUDA only) | "none" (pure LoRA)
         "attn_implementation": "eager",
         "trust_remote_code": False,
@@ -25,7 +25,7 @@ DEFAULT_CONFIG = {
         "train_percentage": 0.8,
         "val_percentage": 0.1,
         "test_percentage": 0.1,
-        "image_size": 896,       # MedGemma expects 896; resizing is applied in the dataset
+        "image_size": 896,       # resized before encoding (896 works for MedGemma; Qwen accepts variable sizes)
         "num_workers": 4,
         "seed": 888,
         "stratify": True,
