@@ -2,12 +2,19 @@ import timm
 import torch
 
 
-def create_timm_model(args):
-    """Create a model from timm with pretrained weights."""
+def create_timm_model(args, in_chans=3):
+    """Create a model from timm with pretrained weights.
+
+    ``in_chans`` must match the number of channels the transform pipeline emits
+    (single-channel volumes are repeated via ``RepeatChanneld`` to ``data.repeats``
+    channels; RGB/color data stays 3). It is derived from the actual preprocessed
+    data so the network always matches the transform output.
+    """
     return timm.create_model(
         args["training"]["timm_model"],
         pretrained=True,
         num_classes=args["training"]["num_classes"],
+        in_chans=in_chans,
     )
 
 

@@ -107,7 +107,7 @@ def train(args, model, criterion, optimizer, train_loader, val_loader, run_dir=N
     return record
 
 
-def train_pipeline(args, train_set, val_set, run_dir=None, device=None):
+def train_pipeline(args, train_set, val_set, run_dir=None, device=None, in_chans=3):
     """Complete training pipeline: create model, train, return results."""
     set_determinism(args["environ"]["seed"])
 
@@ -128,7 +128,7 @@ def train_pipeline(args, train_set, val_set, run_dir=None, device=None):
         args["training"]["num_epoch"],
     )
 
-    model = create_timm_model(args).to(device)
+    model = create_timm_model(args, in_chans=in_chans).to(device)
 
     train_loader = generate_dataloader(args, train_set, shuffle=True, device=device)
     val_loader = generate_dataloader(args, val_set, device=device)

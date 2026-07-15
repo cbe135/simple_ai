@@ -395,12 +395,18 @@ def main():
         f"max: {float(img.max()):.4f}"
     )
 
+    # Model input channels must match the channel count the transform emits
+    # (single-channel volumes are repeated via `data.repeats`; RGB/color stays 3).
+    # Derive it from the preprocessed sample so the network always aligns.
+    in_chans = int(img.shape[0])
+    logger.info(f"Model input channels: {in_chans}")
+
     # Train
     logger.info("Starting training...")
     from src.train import train_pipeline
 
     model, train_loader, val_loader, record = train_pipeline(
-        args, train_set, val_set, run_dir, device=args_cli.device
+        args, train_set, val_set, run_dir, device=args_cli.device, in_chans=in_chans
     )
 
     # Plot loss curves
