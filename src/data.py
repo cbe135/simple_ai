@@ -76,8 +76,8 @@ def resolve_cache_dir(args, data_dir, preprocess_transform):
         return cfg_dir
     # Salt the hash so a change in caching format/behavior invalidates any
     # previously written cache (e.g. one holding mixed MetaTensor/plain items,
-    # or the pre-track_meta=False layout).
-    CACHE_VERSION = "v3-nometa"
+    # or the pre-set_track_meta(False) layout).
+    CACHE_VERSION = "v4-notrackmeta"
     h = hashlib.md5(
         (repr(preprocess_transform) + CACHE_VERSION).encode("utf-8")
     ).hexdigest()[:12]
@@ -93,7 +93,11 @@ def generate_base_cache(args, data_dicts, preprocess_transform, cache_dir):
     valid when the split ratio changes between runs.
     """
     from monai.data import PersistentDataset
+    from monai.config import set_track_meta
     import inspect
+
+    # Ensure cached items are plain Tensors regardless of how this is invoked.
+    set_track_meta(False)
 
     logger.info(
         "Creating persistent CacheDataset (num_items=%d) at %s",

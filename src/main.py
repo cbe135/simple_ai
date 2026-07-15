@@ -42,6 +42,13 @@ if not _IN_NOTEBOOK and "inline" in get_backend().lower():
 from yaml import safe_load
 from numpy import pi
 from monai.utils.misc import set_determinism
+from monai.config import set_track_meta
+
+set_track_meta(False)  # disable MetaTensor globally: downstream MONAI transforms
+# (Resized, ScaleIntensityRanged, MaskIntensityd, RepeatChanneld, Rand*) default
+# track_meta=True and re-wrap plain Tensors into MetaTensors, which then unpickle
+# inconsistently across DataLoader workers and crash collate_meta_tensor_fn. With
+# this off, every cached/preprocessed item is a plain Tensor -> collate_tensor_fn.
 
 logger = getLogger(__name__)
 

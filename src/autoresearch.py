@@ -531,7 +531,21 @@ def run(args: dict) -> None:
                 append_tsv(experiments_path, i, None, None, "PARSE_ERROR", "", err)
                 continue
 
-            modified = "; ".join(diff_configs(current_cfg, cfg))
+            changes = diff_configs(current_cfg, cfg)
+            modified = "; ".join(changes)
+            if changes:
+                logger.info(
+                    "Run %d/%d proposed config changes:\n%s",
+                    i + 1,
+                    num_runs,
+                    "\n".join(f"  {c}" for c in changes),
+                )
+            else:
+                logger.info(
+                    "Run %d/%d proposed config changes: none (identical to previous)",
+                    i + 1,
+                    num_runs,
+                )
             save_config(config_path, cfg)
 
             if local and unload:
