@@ -24,6 +24,7 @@ import atexit
 import json
 import logging
 import os
+import threading
 import re
 import signal
 import shutil
@@ -318,21 +319,37 @@ def run_training(repo_root: Path, config_name: str, data_dir, modality, timeout:
     if modality:
         cmd += ["--modality", str(modality)]
     logger.info("Running training: %s", " ".join(cmd))
-    try:
-        proc = subprocess.run(
-            cmd,
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        return None, f"training timed out after {timeout}s"
+    logger.info("Streaming training output (this can take several minutes)...")
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(repo_root),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    assert proc.stdout is not None
+    buf = []
 
-    stdout = proc.stdout or ""
-    if proc.returncode != 0:
-        tail = "\n".join((proc.stderr or "").strip().splitlines()[-20:])
-        return None, f"training exited {proc.returncode}:\n{tail}"
+    def _reader():
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            if line:
+                logger.info("[train] %s", line)
+            buf.append(line)
+
+    t = threading.Thread(target=_reader, daemon=True)
+    t.start()
+    t.join(timeout=timeout)
+    if t.is_alive():
+        proc.kill()
+        t.join()
+        return None, f"training timed out after {timeout}s"
+    rc = proc.wait()
+    stdout = "\n".join(buf)
+    if rc != 0:
+        tail = "\n".join(buf[-20:])
+        return None, f"training exited {rc}:\n{tail}"
     return parse_validation_loss(stdout)
 
 
