@@ -495,13 +495,17 @@ Two equivalent flows:
    simple_ai_autoresearch_train  --models-dir /content/drive/MyDrive/ollama_models --data-dir /content/dataset --runs 12
    ```
 
-2. **Pull locally, then save.** Use `simple_ai_autoresearch_save` to copy the
-   local store (`~/.ollama/models` or `$OLLAMA_MODELS`) to Drive. It mounts
-   Drive, copies `blobs/` + `manifests/`, and prints the reuse command:
+2. **Pull locally, then save.** `simple_ai_autoresearch_save` defaults to
+   saving `qwen2.5-coder:7b`: it pulls the model into the local store (skipping
+   any already present) and copies the whole store (`blobs/` + `manifests/`) to
+   Drive. It mounts Drive automatically and prints the reuse command. Pass
+   `--model` one or more times to save other models, or `--no-pull` to copy only
+   the existing local store without downloading:
 
    ```bash
-   simple_ai_autoresearch_setup                 # pulls to local default
-   simple_ai_autoresearch_save                  # copies local store -> Drive
+   simple_ai_autoresearch_save                              # pulls + saves default model
+   simple_ai_autoresearch_save --model qwen2.5-coder:7b llama3.2  # save several
+   simple_ai_autoresearch_save --no-pull                     # copy local store only
    # Next session (no re-download):
    simple_ai_autoresearch_train --models-dir /content/drive/MyDrive/ollama_models ...
    ```
@@ -585,7 +589,8 @@ Options: `--data-dir`, `--config` (default `config.yaml`),
 `--runs` (default 10), `--gdown-id`, `--data-name`,
 `--models-dir` (Ollama store; on Colab defaults to a Google Drive mount so
 weights persist — also settable via `$OLLAMA_MODELS`). The companion command
-`simple_ai_autoresearch_save` copies the local Ollama store to Drive.
+`simple_ai_autoresearch_save` pulls (default `qwen2.5-coder:7b`; `--model` is
+repeatable) and copies the local Ollama store to Drive for reuse.
 
 ## Dependencies
 
