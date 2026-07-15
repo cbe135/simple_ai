@@ -32,7 +32,6 @@ config.
 
 ```bash
 uv sync                          # installs everything, no --extra needed
-# (requirements-vlm.txt deps are now in the base dependencies)
 ```
 
 ## Cache the base model (so you don't re-download it every run)
