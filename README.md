@@ -423,6 +423,10 @@ Use the fully-qualified `_target_` (e.g. `monai.transforms.RandFlipd`). Leave th
 
 ## Autonomous Research (`autoresearch`)
 
+The autonomous config-optimization loop is **inspired by**
+[autoresearch](https://github.com/dimitreOliveira/autoresearch) by Dimitre
+Oliveira.
+
 `simple_ai_autoresearch_train` lets an LLM agent improve training by editing
 **only** `config.yaml`. Each run:
 
@@ -599,3 +603,13 @@ weights persist — also settable via `$OLLAMA_MODELS`). The companion command
 ## License
 
 This project is for educational purposes.
+
+## Acknowledgements
+
+- The **autonomous research** feature (LLM-driven `config.yaml` optimization) is
+  inspired by and references
+  [autoresearch](https://github.com/dimitreOliveira/autoresearch) by Dimitre
+  Oliveira.
+- The development of this codebase was assisted by the
+  [hy3](https://opencode.ai) model (`opencode/hy3-free`), an opencode AI
+  assistant.
