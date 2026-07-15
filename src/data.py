@@ -60,6 +60,18 @@ def load_data_list(args, data_dir=None):
                     p if os.path.isabs(p) else os.path.join(data_dir, p)
                     for p in v
                 ]
+
+    # Normalize labels to a scalar int so both `1` and `[1]` in the data list work.
+    for d in data_dicts:
+        lab = d.get("label")
+        if isinstance(lab, list):
+            if not lab:
+                raise SystemExit("Each data entry 'label' must not be an empty list.")
+            lab = lab[0]
+        if lab is None:
+            raise SystemExit("Each data entry must contain a 'label'.")
+        d["label"] = int(lab)
+
     return data_dicts
 
 

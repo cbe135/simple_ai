@@ -34,6 +34,14 @@ def load_data_list(data_dir) -> list[dict]:
                 raise SystemExit(f"{p} has no 'data' list.")
             for e in entries:
                 e.setdefault("filename", e.get("image"))
+                lab = e.get("label")
+                if isinstance(lab, list):
+                    if not lab:
+                        raise SystemExit("Each data entry 'label' must not be an empty list.")
+                    lab = lab[0]
+                if lab is None:
+                    raise SystemExit("Each data entry must contain a 'label'.")
+                e["label"] = int(lab)
             logger.info("Loaded %d entries from %s", len(entries), p)
             return entries
     raise SystemExit(f"No data_list.yaml/json found in {data_dir}")
