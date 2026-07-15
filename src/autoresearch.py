@@ -458,8 +458,11 @@ def run(args: dict) -> None:
     best = None  # (val_loss, config)
     history = []
 
+    SEP = "#" * 80
     try:
         for i in range(num_runs):
+            logger.info(SEP)
+            logger.info("Run %d/%d", i + 1, num_runs)
             current_cfg = load_config(config_path)
             user_prompt = build_user_prompt(
                 yaml.safe_dump(current_cfg, sort_keys=False), history
