@@ -81,7 +81,11 @@ def resolve_cache_dir(args, data_dir, preprocess_transform):
     h = hashlib.md5(
         (repr(preprocess_transform) + CACHE_VERSION).encode("utf-8")
     ).hexdigest()[:12]
-    return os.path.join(str(data_dir), ".transform_cache", h)
+    # Default cache lives under the working dir (the repo, on fast local disk)
+    # so each autoresearch run (a fresh subprocess) re-reads cached tensors
+    # quickly instead of from a possibly-slow data mount. Set data.cache_dir to
+    # override (e.g. to colocate the cache with the data).
+    return os.path.join(os.getcwd(), ".transform_cache", h)
 
 
 def generate_base_cache(args, data_dicts, preprocess_transform, cache_dir):

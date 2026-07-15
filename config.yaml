@@ -24,6 +24,7 @@ data:
   a_max: 200
   cache_rate: 1.0
   num_workers: 4
+  eval_train: true   # set false to skip the full train-set inference (~19s/run) for speed
 
 img_cnt: 5
 

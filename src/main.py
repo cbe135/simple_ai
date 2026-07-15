@@ -354,6 +354,15 @@ def main():
     val_set = make_eval_dataset(base, val_idx)
     test_set = make_eval_dataset(base, test_idx)
 
+    # Pre-warm the persistent cache into the in-RAM copy_cache mirror so training
+    # epoch 1 and the post-training test evaluation hit RAM instead of re-reading
+    # disk on first access. RAM is per-process, so this does not speed up later
+    # autoresearch runs (see the local-disk cache default for that).
+    logger.info("Warming transform cache into RAM...")
+    for _ in base:
+        pass
+    logger.info("Transform cache warmed.")
+
     # Save pre/post transformation sample images to run_dir/samples/
     from src.utils import plot_transform_result
 
@@ -423,10 +432,12 @@ def main():
     makedirs(inference_dir, exist_ok=True)
     makedirs(roc_dir, exist_ok=True)
 
-    train_true, train_pred = infer(
-        args, model, train_loader, True, device=args_cli.device,
-        details_path=path.join(inference_dir, "inference_details_train.log"),
-    )
+    eval_train = bool((args.get("data", {}) or {}).get("eval_train", True))
+    if eval_train:
+        train_true, train_pred = infer(
+            args, model, train_loader, True, device=args_cli.device,
+            details_path=path.join(inference_dir, "inference_details_train.log"),
+        )
     val_true, val_pred = infer(
         args, model, val_loader, True, device=args_cli.device,
         details_path=path.join(inference_dir, "inference_details_validation.log"),
@@ -440,10 +451,11 @@ def main():
         details_path=path.join(inference_dir, "inference_details_test.log"),
     )
 
-    plot_roc_and_show_result(
-        args, train_true, train_pred, title="Train",
-        save_path=path.join(roc_dir, "roc_train.png"),
-    )
+    if eval_train:
+        plot_roc_and_show_result(
+            args, train_true, train_pred, title="Train",
+            save_path=path.join(roc_dir, "roc_train.png"),
+        )
     plot_roc_and_show_result(
         args, val_true, val_pred, title="Validation",
         save_path=path.join(roc_dir, "roc_validation.png"),
