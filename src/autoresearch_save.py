@@ -30,6 +30,7 @@ import os
 import shutil
 
 from .autoresearch import _ollama_reachable, pull_model
+from .autoresearch_paths import _resolve_shortcut
 from .autoresearch_setup import (
     COLAB_MODELS_DIR,
     DEFAULT_MODEL,
@@ -80,7 +81,18 @@ def main(argv=None):
     # do NOT set OLLAMA_MODELS to drive_dir yet, so any pull below goes into the
     # *source* store and gets copied to Drive afterward (avoids a self-copy).
     _ensure_drive_mounted(drive_dir)
-    os.makedirs(drive_dir, exist_ok=True)
+    drive_dir = _resolve_shortcut(drive_dir)
+    try:
+        os.makedirs(drive_dir, exist_ok=True)
+    except OSError as e:
+        if drive_dir.startswith("/content/drive"):
+            raise SystemExit(
+                f"Could not create the Ollama models folder at {drive_dir} ({e}). "
+                "If this is a Google Drive shortcut to a shared/team drive, open "
+                "that target folder once in Google Drive (or re-create the shortcut "
+                "so its target is accessible) and re-run."
+            )
+        raise
 
     # Resolve the *source* store. colab_default=False so we never treat the
     # Drive folder as the source on Colab (that would be a no-op copy).

@@ -501,6 +501,13 @@ env var / `/content`) and use the Drive store. If Drive is **not** mounted:
   `~/.ollama/models` for that session, so they still run — but weights won't
   persist across Colab restarts.
 
+**Google Drive shortcuts are supported.** If `ollama_models` (or any `--models-dir`
+under `/content/drive`) is a Drive *shortcut* (a symlink, e.g. to a shared/team
+drive), the code resolves it to the real target folder automatically and writes
+there; a dangling shortcut is re-created. If the shortcut's target is not
+accessible (e.g. a shared drive you haven't opened yet), you'll get a clear error
+telling you to open that target folder once in Google Drive and re-run.
+
 Two equivalent flows:
 
 1. **Pull straight to Drive (no separate save).** Pass `--models-dir` so the

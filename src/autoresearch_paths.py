@@ -65,6 +65,19 @@ def _ensure_drive_mounted(drive_dir: str) -> None:
         )
 
 
+def _resolve_shortcut(path: str) -> str:
+    """Resolve a Google Drive shortcut (symlink) to its real target.
+
+    On Colab, Drive shortcuts appear as symlinks (e.g. ``MyDrive/ollama_models``
+    -> ``drive/.shortcut-targets-by-id/<id>/ollama_models``). ``os.makedirs``
+    raises ``FileExistsError`` on a symlink even with ``exist_ok=True`` when the
+    target isn't a directory, so callers must resolve before creating.
+    """
+    if os.path.islink(path):
+        return os.path.realpath(path)
+    return path
+
+
 def resolve_models_dir(models_dir_arg=None, colab_default: bool = True) -> str:
     """Resolve the Ollama models directory to use, in priority order:
 
@@ -114,6 +127,32 @@ def apply_models_dir(
                 DEFAULT_MODELS_DIR,
             )
             models_dir = DEFAULT_MODELS_DIR
-    os.makedirs(models_dir, exist_ok=True)
+    # Resolve a Google Drive shortcut (symlink) to its real target so Ollama
+    # writes into the actual folder; also creates the target if the shortcut
+    # was dangling.
+    if os.path.islink(models_dir):
+        resolved = os.path.realpath(models_dir)
+        if not os.path.exists(resolved):
+            logger.warning(
+                "Ollama models path %s is a Drive shortcut whose target does not "
+                "yet exist; creating the target folder %s so weights can be saved.",
+                models_dir,
+                resolved,
+            )
+        else:
+            logger.info("Resolved Drive shortcut %s -> %s", models_dir, resolved)
+        models_dir = resolved
+    try:
+        os.makedirs(models_dir, exist_ok=True)
+    except OSError as e:
+        if models_dir.startswith("/content/drive"):
+            raise SystemExit(
+                f"Could not create the Ollama models folder at {models_dir} "
+                f"({e}). If this path is a Google Drive shortcut to a shared/team "
+                "drive, open that target folder once in Google Drive (or re-create "
+                "the shortcut so its target is accessible) and re-run. Ollama needs "
+                "a writable folder to store weights."
+            )
+        raise
     os.environ["OLLAMA_MODELS"] = models_dir
     return models_dir
