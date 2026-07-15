@@ -1,0 +1,79 @@
+"""Shared Ollama models-directory resolution (used by setup / serve / train / save).
+
+Kept free of any import from ``autoresearch`` / ``autoresearch_setup`` so it can
+be imported from either without creating a circular import.
+"""
+
+import logging
+import os
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_MODELS_DIR = os.path.expanduser("~/.ollama/models")
+COLAB_MODELS_DIR = "/content/drive/MyDrive/ollama_models"
+
+
+def on_colab() -> bool:
+    """Return True if running inside a Google Colab kernel."""
+    try:
+        import google.colab  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
+
+def _ensure_drive_mounted(drive_dir: str) -> None:
+    """Mount Google Drive if ``drive_dir`` lives under /content/drive and isn't mounted.
+
+    Raises a clear error (instead of silently creating a local folder that looks
+    like Drive but isn't) when the mount cannot be performed.
+    """
+    if not drive_dir.startswith("/content/drive"):
+        return
+    if os.path.ismount("/content/drive"):
+        return
+    try:
+        from google.colab import drive
+
+        logger.info("Mounting Google Drive at /content/drive ...")
+        drive.mount("/content/drive")
+    except Exception as e:  # noqa: BLE001
+        raise SystemExit(
+            "Google Drive is not mounted and could not be mounted automatically "
+            f"({e}). Mount it in a Python cell first:\n"
+            "    from google.colab import drive\n"
+            "    drive.mount('/content/drive')\n"
+            "then re-run the command."
+        )
+
+
+def resolve_models_dir(models_dir_arg=None, colab_default: bool = True) -> str:
+    """Resolve the Ollama models directory to use, in priority order:
+
+    1. explicit ``--models-dir`` argument
+    2. ``$OLLAMA_MODELS`` environment variable
+    3. on Colab (when ``colab_default``): ``COLAB_MODELS_DIR`` (Google Drive)
+    4. otherwise: ``DEFAULT_MODELS_DIR`` (``~/.ollama/models``)
+    """
+    if models_dir_arg:
+        return os.path.expanduser(models_dir_arg)
+    env = os.environ.get("OLLAMA_MODELS")
+    if env:
+        return env
+    if colab_default and on_colab():
+        return COLAB_MODELS_DIR
+    return DEFAULT_MODELS_DIR
+
+
+def apply_models_dir(models_dir_arg=None, colab_default: bool = True) -> str:
+    """Resolve, mount (if on Drive), create, and export ``OLLAMA_MODELS``.
+
+    Returns the resolved path. Child ``ollama`` processes inherit the env var,
+    so calling this before ``ollama serve`` / ``ollama pull`` is sufficient.
+    """
+    models_dir = resolve_models_dir(models_dir_arg, colab_default=colab_default)
+    _ensure_drive_mounted(models_dir)
+    os.makedirs(models_dir, exist_ok=True)
+    os.environ["OLLAMA_MODELS"] = models_dir
+    return models_dir

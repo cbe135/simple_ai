@@ -20,6 +20,7 @@ Examples
 
 import argparse
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -35,6 +36,17 @@ from .autoresearch import (
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "qwen2.5-coder:7b"
+
+# Re-exported from the standalone paths module so existing importers of
+# ``autoresearch_setup`` keep working without a circular import.
+from .autoresearch_paths import (  # noqa: E402
+    COLAB_MODELS_DIR,
+    DEFAULT_MODELS_DIR,
+    _ensure_drive_mounted,
+    apply_models_dir,
+    on_colab,
+    resolve_models_dir,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -247,7 +259,18 @@ def main(argv=None):
         action="store_true",
         help="Reinstall Ollama even if already present.",
     )
+    parser.add_argument(
+        "--models-dir",
+        default=None,
+        help="Ollama models directory. Default on Colab: "
+        f"{COLAB_MODELS_DIR}; otherwise {DEFAULT_MODELS_DIR}. Can also be set via "
+        "$OLLAMA_MODELS. The pulled model is stored here (e.g. a Google Drive mount "
+        "to persist across sessions).",
+    )
     args = parser.parse_args(argv)
+
+    models_dir = apply_models_dir(args.models_dir)
+    logger.info("Ollama models directory: %s", models_dir)
 
     install_ollama(force=args.force)
     ensure_ollama_running()

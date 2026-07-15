@@ -34,11 +34,10 @@ import tempfile
 import time
 
 from .autoresearch import OLLAMA_PORT, _ollama_reachable, ensure_ollama_model
-from .autoresearch_setup import install_ollama
+from .autoresearch_setup import apply_models_dir, install_ollama
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODELS_DIR = os.path.expanduser("~/.ollama/models")
 DEFAULT_MODEL = "qwen2.5-coder:7b"
 
 
@@ -136,7 +135,9 @@ def main(argv=None):
     parser.add_argument(
         "--models-dir",
         default=None,
-        help="Ollama models directory (default: ~/.ollama/models or $OLLAMA_MODELS).",
+        help="Ollama models directory. Default on Colab: "
+        "/content/drive/MyDrive/ollama_models; otherwise ~/.ollama/models. Can also "
+        "be set via $OLLAMA_MODELS.",
     )
     parser.add_argument(
         "--model",
@@ -158,10 +159,8 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
 
-    models_dir = args.models_dir or os.environ.get("OLLAMA_MODELS") or DEFAULT_MODELS_DIR
-    os.makedirs(models_dir, exist_ok=True)
+    models_dir = apply_models_dir(args.models_dir)
     # ollama serve (and the training command's ollama calls) inherit this.
-    os.environ["OLLAMA_MODELS"] = models_dir
 
     if args.warm_start:
         # Keep the loaded model resident for a remote consumer (no effect on an

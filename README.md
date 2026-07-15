@@ -473,6 +473,39 @@ simple_ai_autoresearch_setup --no-pull  # skip the ~5GB model download
 If setup reports CPU-only Ollama, switch to a CUDA 12.x T4 runtime (see
 caveats below) or use OpenRouter with `--remote`.
 
+### Persist weights to Google Drive
+
+A Colab runtime's local disk is wiped on disconnect, so the multi-GB model
+re-downloads every session. All three autoresearch commands auto-point Ollama's
+store at a Google Drive folder **when run on Colab** (default
+`/content/drive/MyDrive/ollama_models`; also settable via `$OLLAMA_MODELS` or the
+shared `--models-dir` flag). On first run Drive is mounted automatically.
+
+Two equivalent flows:
+
+1. **Pull straight to Drive (no separate save).** Pass `--models-dir` so the
+   pull lands on Drive from the start:
+
+   ```bash
+   simple_ai_autoresearch_setup  --models-dir /content/drive/MyDrive/ollama_models
+   simple_ai_autoresearch_train  --models-dir /content/drive/MyDrive/ollama_models --data-dir /content/dataset --runs 12
+   ```
+
+2. **Pull locally, then save.** Use `simple_ai_autoresearch_save` to copy the
+   local store (`~/.ollama/models` or `$OLLAMA_MODELS`) to Drive. It mounts
+   Drive, copies `blobs/` + `manifests/`, and prints the reuse command:
+
+   ```bash
+   simple_ai_autoresearch_setup                 # pulls to local default
+   simple_ai_autoresearch_save                  # copies local store -> Drive
+   # Next session (no re-download):
+   simple_ai_autoresearch_train --models-dir /content/drive/MyDrive/ollama_models ...
+   ```
+
+Either way, a later session that references the same Drive path sees the model
+already present (`ollama list` / `ollama pull` skips the download). The store is
+additive — pulling more models later just adds to the same Drive folder.
+
 ### Background serving (run server in its own cell)
 
 `ollama serve` is long-running, so it must not block the notebook cell. Use the
@@ -545,7 +578,10 @@ Options: `--data-dir`, `--config` (default `config.yaml`),
 `--ollama-base-url` (remote Ollama URL with --local, e.g. `https://x.loca.lt/v1`),
 `--local` (default), `--remote` (use OpenRouter instead),
 `--unload-between-runs`, `--timeout` (default 700s),
-`--runs` (default 10), `--gdown-id`, `--data-name`.
+`--runs` (default 10), `--gdown-id`, `--data-name`,
+`--models-dir` (Ollama store; on Colab defaults to a Google Drive mount so
+weights persist — also settable via `$OLLAMA_MODELS`). The companion command
+`simple_ai_autoresearch_save` copies the local Ollama store to Drive.
 
 ## Dependencies
 

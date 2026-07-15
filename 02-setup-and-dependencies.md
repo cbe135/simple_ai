@@ -28,6 +28,7 @@ pip install -e .
 | `simple_ai_autoresearch_train` | `src/autoresearch_cli.py` | LLM 自動搜尋更好的 config |
 | `simple_ai_autoresearch_setup` | `src/autoresearch_setup.py` | 安裝 Ollama、檢查 GPU/驅動、預拉模型 |
 | `simple_ai_autoresearch_serve` | `src/autoresearch_serve.py` | 背景啟動 Ollama server（可對外暴露） |
+| `simple_ai_autoresearch_save` | `src/autoresearch_save.py` | 將 Ollama 模型權重複製到 Google Drive，跨 session 重複使用 |
 
 基本的訓練執行方式：
 

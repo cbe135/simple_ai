@@ -38,6 +38,8 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
+from .autoresearch_paths import apply_models_dir
+
 logger = logging.getLogger(__name__)
 
 PROGRAM_MD = Path(__file__).with_name("program.md")
@@ -464,6 +466,10 @@ def run(args: dict) -> None:
     if local:
         if not model:
             model = "qwen2.5-coder:7b"
+        # Point Ollama at the chosen store (Drive on Colab by default) before
+        # starting the server or pulling, so weights are reused across sessions.
+        models_dir = apply_models_dir(args.get("models_dir"))
+        logger.info("Ollama models directory: %s", models_dir)
         ollama_base_url = args.get("ollama_base_url")
         if ollama_base_url:
             # Point at a remote Ollama server (e.g. exposed from another

@@ -103,6 +103,13 @@ def main(argv=None):
     parser.add_argument("--gdown-id", default=None, help="Google Drive file id to download first.")
     parser.add_argument("--data-name", default=None, help="Dataset name used for archive naming.")
     parser.add_argument("--repo-root", default=None, help="Repo root (default: current dir).")
+    parser.add_argument(
+        "--models-dir",
+        default=None,
+        help="Ollama models directory (default on Colab: /content/drive/MyDrive/"
+        "ollama_models; otherwise ~/.ollama/models). Can also be set via $OLLAMA_MODELS. "
+        "Use a Google Drive mount to reuse weights across sessions without re-downloading.",
+    )
 
     args = parser.parse_args(argv)
 
