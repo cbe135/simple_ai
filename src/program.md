@@ -92,8 +92,10 @@ transforms:                     # optional extra MONAI transforms (advanced)
 
 ## What tends to help (exploration ideas)
 
-- Learning rate: try 1e-3, 3e-4, 5e-4, 1e-4.
-- Optimizer: `adamw` with small `weight_decay` (1e-4..1e-2) often generalizes.
+- Learning rate: try 0.001, 0.0003, 0.0005, 0.0001. Write plain decimals, NOT
+  scientific notation like `1e-4` (YAML parses `1e-4` as a string, which breaks
+  training). If you must use exponents, include a decimal point: `1.0e-4`.
+- Optimizer: `adamw` with small `weight_decay` (0.0001..0.01) often generalizes.
 - Augmentation: raise `affine_prob` (0.2–0.5) and modest `rotate_range` /
   `translate_range` / `scale_range` to improve robustness.
 - Batch size: larger batches stabilize training if memory allows.

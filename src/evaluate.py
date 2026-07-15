@@ -25,7 +25,7 @@ def infer(args, model, data_loader, details=False, device=None, details_path=Non
     device = device or get_device()
     logger.info("Using device for inference: %s", device)
     sigmoid = torch.nn.Sigmoid()
-    thres = args["threshold"]
+    thres = float(args["threshold"])
 
     y_true = []
     y_pred = []
@@ -69,7 +69,7 @@ def plot_roc_and_show_result(args, y_true, y_pred, title="", save_path=None):
     """Plot ROC curve and print confusion matrix metrics."""
     import matplotlib.pyplot as plt
 
-    thres = args["threshold"]
+    thres = float(args["threshold"])
     fpr, tpr, _ = roc_curve(y_true, y_pred)
     roc_auc = auc(fpr, tpr)
 

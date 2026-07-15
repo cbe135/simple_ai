@@ -128,8 +128,8 @@ def get_preprocess(args, data_dicts_sample, dataset_info):
         steps.append(
             ScaleIntensityRanged(
                 keys=["image"],
-                a_min=args["data"]["a_min"],
-                a_max=args["data"]["a_max"],
+                a_min=float(args["data"]["a_min"]),
+                a_max=float(args["data"]["a_max"]),
                 b_min=0,
                 b_max=1,
                 clip=True,
@@ -171,7 +171,7 @@ def get_augmentation(args, dataset_info):
             shear_range=shear_range,
             translate_range=translate_range,
             scale_range=scale_range,
-            prob=args["data"]["affine_prob"],
+            prob=float(args["data"]["affine_prob"]),
             padding_mode="border",
         ),
     ]
@@ -181,7 +181,7 @@ def get_augmentation(args, dataset_info):
         RandFlipd(
             keys="image",
             spatial_axis=spatial_axis,
-            prob=args["data"]["flip_prob"],
+            prob=float(args["data"]["flip_prob"]),
         )
     )
 

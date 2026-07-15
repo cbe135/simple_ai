@@ -92,7 +92,7 @@ def generate_dataset(args, datalist, transform):
     """Create a CacheDataset from a data list and transform pipeline."""
     from monai.data import CacheDataset
 
-    cache_rate = args["data"]["cache_rate"]
+    cache_rate = float(args["data"]["cache_rate"])
     logger.info(
         "Creating CacheDataset (cache_rate=%s, num_items=%d)",
         cache_rate, len(datalist),

@@ -21,9 +21,9 @@ def generate_optimizer(args, model):
     t = args.get("training", {})
     opt_cfg = t.get("optimizer", {}) or {}
     name = (opt_cfg.get("name") or "adam").lower()
-    lr = t.get("lr", 0.001)
-    weight_decay = opt_cfg.get("weight_decay", 0.0)
-    momentum = opt_cfg.get("momentum", 0.9)
+    lr = float(t.get("lr", 0.001))
+    weight_decay = float(opt_cfg.get("weight_decay", 0.0))
+    momentum = float(opt_cfg.get("momentum", 0.9))
 
     params = model.parameters()
     if name == "sgd":
