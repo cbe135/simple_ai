@@ -74,7 +74,12 @@ def resolve_cache_dir(args, data_dir, preprocess_transform):
     cfg_dir = (args.get("data", {}) or {}).get("cache_dir")
     if cfg_dir:
         return cfg_dir
-    h = hashlib.md5(repr(preprocess_transform).encode("utf-8")).hexdigest()[:12]
+    # Salt the hash so a change in caching format/behavior invalidates any
+    # previously written cache (e.g. one holding mixed MetaTensor/plain items).
+    CACHE_VERSION = "v2-persistent"
+    h = hashlib.md5(
+        (repr(preprocess_transform) + CACHE_VERSION).encode("utf-8")
+    ).hexdigest()[:12]
     return os.path.join(str(data_dir), ".transform_cache", h)
 
 
@@ -179,13 +184,18 @@ def make_eval_dataset(base, idx):
 def generate_dataloader(args, dataset, shuffle=False, device=None):
     """Create a DataLoader from a dataset.
 
-    Uses parallel workers and pinned memory (when on a GPU) so the device is
-    fed continuously instead of waiting on single-process CPU preprocessing.
+    NOTE: ``num_workers`` is forced to 0 on purpose. With ``PersistentDataset``
+    the transformed items (MetaTensors) are pickled across the worker→main
+    boundary; if MONAI's MetaTensor pickle drops ``meta`` in some workers but
+    not others, a batch mixes MetaTensor and plain Tensor and
+    ``collate_meta_tensor_fn`` crashes. Running in the main process keeps a
+    single, uniform disk round-trip so the meta handling is consistent. Raise
+    this once MetaTensor pickling is confirmed to preserve meta end-to-end.
     """
     from monai.data import DataLoader
 
     device = device or get_device()
-    num_workers = int(args["data"].get("num_workers", 0))
+    num_workers = 0
 
     return DataLoader(
         dataset,
