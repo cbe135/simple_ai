@@ -102,9 +102,10 @@ def get_loaders(data_dicts_sample):
     if has_masks:
         keys.append("mask")
 
+    ensure_keys = ["image", "label"] + (["mask"] if has_masks else [])
     return [
         LoadImaged(keys=keys, ensure_channel_first=True, **reader_kw),
-        EnsureTyped(keys=["image", "label"], track_meta=False),
+        EnsureTyped(keys=ensure_keys, track_meta=False),
     ]
 
 
@@ -124,7 +125,7 @@ def get_preprocess(args, data_dicts_sample, dataset_info):
         keys = ["image"]
         if has_masks:
             keys.append("mask")
-        steps.append(Resized(keys=keys, spatial_size=spatial_size))
+        steps.append(Resized(keys=keys, spatial_size=spatial_size, track_meta=False))
         steps.append(
             ScaleIntensityRanged(
                 keys=["image"],
@@ -133,14 +134,15 @@ def get_preprocess(args, data_dicts_sample, dataset_info):
                 b_min=0,
                 b_max=1,
                 clip=True,
+                track_meta=False,
             )
         )
         if has_masks:
-            steps.append(MaskIntensityd(keys="image", mask_key="mask"))
+            steps.append(MaskIntensityd(keys="image", mask_key="mask", track_meta=False))
     else:
         # Non-CT (xray, mri, color, ...): resize only
         steps.append(
-            Resized(keys=["image"], spatial_size=spatial_size)
+            Resized(keys=["image"], spatial_size=spatial_size, track_meta=False)
         )
 
     # Single-channel images are repeated to build a multi-channel input.
@@ -148,7 +150,9 @@ def get_preprocess(args, data_dicts_sample, dataset_info):
     # so we skip the repeat.
     if mod != "color":
         steps.append(
-            RepeatChanneld(keys=["image"], repeats=args["data"]["repeats"])
+            RepeatChanneld(
+                keys=["image"], repeats=args["data"]["repeats"], track_meta=False
+            )
         )
 
     return steps
@@ -173,6 +177,7 @@ def get_augmentation(args, dataset_info):
             scale_range=scale_range,
             prob=float(args["data"]["affine_prob"]),
             padding_mode="border",
+            track_meta=False,
         ),
     ]
 
@@ -182,11 +187,12 @@ def get_augmentation(args, dataset_info):
             keys="image",
             spatial_axis=spatial_axis,
             prob=float(args["data"]["flip_prob"]),
+            track_meta=False,
         )
     )
 
     # Gaussian noise is always applied (controlled by prob in augmentation config)
-    aug.append(RandGaussianNoiseD(keys="image"))
+    aug.append(RandGaussianNoiseD(keys="image", track_meta=False))
 
     return aug
 

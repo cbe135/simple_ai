@@ -93,11 +93,7 @@ def generate_base_cache(args, data_dicts, preprocess_transform, cache_dir):
     valid when the split ratio changes between runs.
     """
     from monai.data import PersistentDataset
-    from monai.config import set_track_meta
     import inspect
-
-    # Ensure cached items are plain Tensors regardless of how this is invoked.
-    set_track_meta(False)
 
     logger.info(
         "Creating persistent CacheDataset (num_items=%d) at %s",
