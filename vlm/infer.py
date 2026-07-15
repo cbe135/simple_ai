@@ -84,6 +84,7 @@ def infer_hf(cfg, data_dir, split, adapter, base_dir, device, quantize, run_dir)
         gen = sequences[0][inputs["input_ids"].shape[1]:]
         text = tokenizer.decode(gen, skip_special_tokens=True).strip()
         pred = parse_prediction(text, label_map)
+        logger.info("sample %s | true=%s pred=%s | %s", s["filename"], s["label"], pred, text)
 
         score = None
         if gen_scores is not None:
