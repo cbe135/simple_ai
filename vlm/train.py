@@ -14,6 +14,39 @@ from .models import load_for_training
 logger = logging.getLogger(__name__)
 
 
+def _save_loss_curve(run_dir, log_history):
+    """Plot training (and eval, if present) loss from the Trainer log history."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from pathlib import Path
+
+    steps, train_loss = [], []
+    eval_steps, eval_loss = [], []
+    for entry in log_history:
+        if "loss" in entry:
+            steps.append(entry.get("step", len(steps) + 1))
+            train_loss.append(entry["loss"])
+        if "eval_loss" in entry:
+            eval_steps.append(entry.get("step", len(eval_steps) + 1))
+            eval_loss.append(entry["eval_loss"])
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    if train_loss:
+        ax.plot(steps, train_loss, label="train")
+    if eval_loss:
+        ax.plot(eval_steps, eval_loss, label="eval")
+    ax.set_xlabel("Step")
+    ax.set_ylabel("Loss")
+    ax.set_title("Training loss")
+    ax.legend(loc="upper right")
+    fig.tight_layout()
+    path = Path(run_dir) / "loss_curve.png"
+    fig.savefig(path)
+    plt.close(fig)
+    logger.info("Saved loss curve to %s", path)
+
+
 def train_pipeline(cfg: dict, data_dir, base_dir=None, device=None, quantize=None):
     from torch.utils.data import DataLoader
     from transformers import Trainer, TrainingArguments
@@ -68,6 +101,7 @@ def train_pipeline(cfg: dict, data_dir, base_dir=None, device=None, quantize=Non
         data_collator=collator,
     )
     trainer.train()
+    _save_loss_curve(run_dir, trainer.state.log_history)
 
     # Persist the LoRA adapter (the fine-tuned result) + processor + resolved config.
     adapter_dir = run_dir / "adapter"
