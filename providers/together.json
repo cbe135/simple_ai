@@ -1,0 +1,8 @@
+{
+  "name": "together",
+  "base_url": "https://api.together.xyz/v1",
+  "api_key_env": "TOGETHER_API_KEY",
+  "default_model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+  "headers": {},
+  "extra_body": {}
+}

@@ -443,8 +443,32 @@ Two backends are supported:
   setup first to install Ollama and verify your GPU/driver:
   `simple_ai_autoresearch_setup`. The training CLI starts `ollama serve` if
   needed, pulls the model, and shuts it down on completion/interrupt.
-- **OpenRouter (free tier)** — opt in with `--remote`; needs
-  `OPENROUTER_API_KEY` (env or `.env`). Pass `--model <id>`.
+- **Hosted / OpenAI-compatible providers (OpenRouter, OpenAI, Anthropic, Groq,
+  Together, DeepSeek, …)** — when `--local` is *not* used, the LLM client is
+  OpenAI-compatible and pointed at a provider described by a small JSON file.
+
+  A provider is selected with `--provider <name>` (loads `providers/<name>.json`)
+  or `--provider-config <path>` (explicit JSON). Each preset supplies
+  `base_url`, the API-key env var name (`api_key_env`), a `default_model`, and
+  optional `headers`/`extra_body`. The secret itself lives in the environment /
+  `.env` under the name in `api_key_env` — **never** in the JSON. If neither
+  `--provider` nor `--provider-config` is given, it falls back to OpenRouter
+  (needs `OPENROUTER_API_KEY`).
+
+  ```bash
+  # OpenAI
+  export OPENAI_API_KEY=sk-...
+  simple_ai_autoresearch_train --provider openai --modality ct --runs 12
+
+  # Anthropic (OpenAI-compatible beta)
+  export ANTHROPIC_API_KEY=sk-ant-...
+  simple_ai_autoresearch_train --provider anthropic --modality ct --runs 12
+
+  # Anything else: write your own providers/myhost.json and --provider myhost
+  ```
+
+  The CLI also accepts `--base-url`, `--model`, `--api-key-env`, and `--api-key`
+  to override any field from the preset.
 
 ### Prerequisites & caveats
 

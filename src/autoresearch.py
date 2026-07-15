@@ -10,9 +10,13 @@ The agent improves training by editing ONLY ``config.yaml``. A single run is:
      ``config.yaml``); otherwise discard it (``git checkout config.yaml``).
      Every run is appended to ``experiments.tsv``.
 
-The LLM client is OpenAI-compatible: OpenRouter by default, or a local Ollama
-server when ``--local`` is passed. When running locally the Ollama server is
-started on launch and shut down on completion or interrupt.
+The LLM client is OpenAI-compatible. With ``--local`` (the default) it talks to
+a local Ollama server. Without ``--local`` it reads a provider preset
+(``--provider`` → ``providers/<name>.json`` or ``--provider-config <path>``) that
+supplies the base URL, the API-key env var name, a default model, and optional
+headers/extra_body; the secret is read from the environment / ``.env``. Falls
+back to OpenRouter when no preset is given. When running locally the Ollama
+server is started on launch and shut down on completion or interrupt.
 
 The training subprocess and the LLM call are fully sequential: phases never
 overlap.
@@ -109,13 +113,20 @@ def parse_validation_loss(stdout: str):
 # --------------------------------------------------------------------------- #
 # LLM client (OpenAI-compatible)
 # --------------------------------------------------------------------------- #
-def make_client(base_url: str, api_key: str):
+def make_client(base_url: str, api_key: str, default_headers: dict | None = None):
     from openai import OpenAI
 
-    return OpenAI(api_key=api_key, base_url=base_url)
+    return OpenAI(api_key=api_key, base_url=base_url, default_headers=default_headers or {})
 
 
-def call_llm(client, model: str, system: str, user: str, max_tokens: int = 4096) -> str:
+def call_llm(
+    client,
+    model: str,
+    system: str,
+    user: str,
+    max_tokens: int = 4096,
+    extra_body: dict | None = None,
+) -> str:
     resp = client.chat.completions.create(
         model=model,
         messages=[
@@ -124,8 +135,66 @@ def call_llm(client, model: str, system: str, user: str, max_tokens: int = 4096)
         ],
         temperature=0.6,
         max_tokens=max_tokens,
+        extra_body=extra_body or {},
     )
     return (resp.choices[0].message.content or "").strip()
+
+
+def load_provider_config(args: dict, repo_root: Path) -> dict:
+    """Build the effective remote-provider config from args + JSON preset.
+
+    Resolution order for each field: explicit CLI flag > provider JSON > defaults.
+    Returns a dict with keys: base_url, api_key_env, model, headers, extra_body.
+    """
+    cfg: dict = {
+        "base_url": None,
+        "api_key_env": None,
+        "model": args.get("model"),
+        "headers": {},
+        "extra_body": {},
+    }
+
+    preset_path = args.get("provider_config")
+    provider_name = args.get("provider") or "openrouter"
+    if not preset_path:
+        candidate = repo_root / "providers" / f"{provider_name}.json"
+        if candidate.exists():
+            preset_path = str(candidate)
+        elif provider_name != "openrouter":
+            raise SystemExit(
+                f"Provider preset not found: {candidate}. Set --provider-config to a "
+                "valid JSON file, or use --provider with a file under providers/."
+            )
+
+    if preset_path:
+        import json as _json
+
+        with open(preset_path, "r", encoding="utf-8") as f:
+            preset = _json.load(f)
+        cfg["base_url"] = cfg["base_url"] or preset.get("base_url")
+        cfg["api_key_env"] = cfg["api_key_env"] or preset.get("api_key_env")
+        cfg["model"] = cfg["model"] or preset.get("default_model")
+        cfg["headers"] = {**preset.get("headers", {}), **cfg["headers"]}
+        cfg["extra_body"] = {**preset.get("extra_body", {}), **cfg["extra_body"]}
+
+    # OpenRouter defaults kept for backwards compatibility when no preset resolved.
+    if not cfg["base_url"]:
+        cfg["base_url"] = args.get("base_url") or os.environ.get(
+            "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
+        )
+    if not cfg["api_key_env"]:
+        cfg["api_key_env"] = "OPENROUTER_API_KEY"
+    if not cfg["model"]:
+        cfg["model"] = "meta-llama/llama-3.1-8b-instruct:free"
+
+    # Explicit overrides win last.
+    if args.get("base_url"):
+        cfg["base_url"] = args["base_url"]
+    if args.get("api_key_env"):
+        cfg["api_key_env"] = args["api_key_env"]
+    if args.get("model"):
+        cfg["model"] = args["model"]
+    return cfg
 
 
 # --------------------------------------------------------------------------- #
@@ -463,6 +532,7 @@ def run(args: dict) -> None:
 
     client = None
     model = args.get("model")
+    extra_body = {}
     if local:
         if not model:
             model = "qwen2.5-coder:7b"
@@ -491,20 +561,35 @@ def run(args: dict) -> None:
 
             signal.signal(signal.SIGINT, _on_signal)
             signal.signal(signal.SIGTERM, _on_signal)
+        client = make_client(base_url, api_key)
     else:
-        if not model:
-            model = "meta-llama/llama-3.1-8b-instruct:free"
-        base_url = args.get("base_url") or os.environ.get(
-            "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
-        )
-        api_key = os.environ.get("OPENROUTER_API_KEY")
+        # Remote / hosted providers: resolve from --provider / --provider-config
+        # JSON + .env (see load_provider_config). The preset supplies base_url,
+        # api key env var name, default model, headers and extra_body.
+        provider = load_provider_config(args, repo_root)
+        model = provider["model"]
+        base_url = provider["base_url"]
+        api_key_env = provider["api_key_env"]
+
+        if args.get("api_key"):
+            api_key = args["api_key"]
+        else:
+            api_key = os.environ.get(api_key_env)
         if not api_key:
             raise SystemExit(
-                "OPENROUTER_API_KEY is not set. Export it (or put it in .env), "
-                "or pass --local to use a local Ollama server instead."
+                f"{api_key_env} is not set. Export it (or put it in .env), pass "
+                "--api-key, or pass --local to use a local Ollama server instead."
             )
+        logger.info(
+            "Using remote provider '%s' (base_url=%s, model=%s, key_env=%s)",
+            args.get("provider") or "openrouter",
+            base_url,
+            model,
+            api_key_env,
+        )
+        client = make_client(base_url, api_key, default_headers=provider.get("headers"))
+        extra_body = provider.get("extra_body", {})
 
-    client = make_client(base_url, api_key)
 
     best = None  # (val_loss, config)
     history = []
@@ -523,7 +608,7 @@ def run(args: dict) -> None:
                 ollama_warmup(client, model)
 
             logger.info("Run %d/%d: asking LLM for a new config...", i + 1, num_runs)
-            text = call_llm(client, model, system, user_prompt)
+            text = call_llm(client, model, system, user_prompt, extra_body=extra_body)
             cfg, err = extract_yaml_block(text)
             if err:
                 logger.warning("Run %d skipped (LLM output invalid: %s)", i + 1, err)

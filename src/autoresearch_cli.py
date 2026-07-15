@@ -110,6 +110,34 @@ def main(argv=None):
         "ollama_models; otherwise ~/.ollama/models). Can also be set via $OLLAMA_MODELS. "
         "Use a Google Drive mount to reuse weights across sessions without re-downloading.",
     )
+    parser.add_argument(
+        "--provider",
+        default=None,
+        help="Name of a provider preset in providers/<name>.json (e.g. openai, "
+        "anthropic, groq, together, deepseek, openrouter). Used only when --local "
+        "is not set. Falls back to 'openrouter' if neither --provider nor "
+        "--provider-config is given.",
+    )
+    parser.add_argument(
+        "--provider-config",
+        default=None,
+        help="Path to a provider JSON describing base_url / api_key_env / "
+        "default_model / headers / extra_body. Overrides --provider. See "
+        "providers/ for examples.",
+    )
+    parser.add_argument(
+        "--api-key-env",
+        default=None,
+        help="Name of the environment variable holding the API key (overrides the "
+        "value from the provider JSON). The secret itself is read from the "
+        "environment / .env file.",
+    )
+    parser.add_argument(
+        "--api-key",
+        default=None,
+        help="Literal API key (overrides --api-key-env and the .env lookup). "
+        "Prefer --api-key-env + .env to avoid leaking secrets in shell history.",
+    )
 
     args = parser.parse_args(argv)
 
