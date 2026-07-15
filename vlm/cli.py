@@ -13,6 +13,8 @@ import os
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 logger = logging.getLogger("vlm")
 
 # Make the repo root importable (so `vlm` and `src` resolve regardless of cwd).
@@ -22,6 +24,7 @@ if str(REPO_ROOT) not in sys.path:
 
 
 def _setup_logging():
+    load_dotenv()  # pick up .env (e.g. HF_TOKEN) for huggingface_hub
     level = getattr(logging, os.environ.get("SIMPLE_AI_LOG_LEVEL", "INFO").upper(), logging.INFO)
     logging.basicConfig(
         level=level,
