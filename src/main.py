@@ -40,47 +40,10 @@ if not _IN_NOTEBOOK and "inline" in get_backend().lower():
     use("Agg")
 
 from yaml import safe_load
-from numpy import pi
 from monai.utils.misc import set_determinism
+from src.defaults import DEFAULT_ARGS
 
 logger = getLogger(__name__)
-
-DEFAULT_ARGS = {
-    "environ": {
-        "config_file": "config.yaml",
-        "seed": 888,
-    },
-    "data": {
-        "train_percentage": 0.8,
-        "val_percentage": 0.1,
-        "test_percentage": 0.1,
-        "spatial_size": [250, 250],
-        "repeats": 3,
-        "rotate_range": [
-            [pi / 18, pi / 9],
-            [pi / 18, pi / 9],
-        ],
-        "shear_range": [[0, 0], [0, 0]],
-        "translate_range": [[-60, 60], [0, 0]],
-        "scale_range": [[0, 0], [0, 0]],
-        "affine_prob": 0,
-        "spatial_axis": [0, 1],
-        "flip_prob": 0.5,
-        "a_min": -125,
-        "a_max": 200,
-        "cache_rate": 1.0,
-        "num_workers": 4,
-    },
-    "img_cnt": 5,
-    "training": {
-        "num_epoch": 3,
-        "batch_size": 16,
-        "lr": 1e-3,
-        "timm_model": "resnet18",
-        "num_classes": 1,
-    },
-    "threshold": 0.5,
-}
 
 
 def load_config(config_path=None, overrides=None):
