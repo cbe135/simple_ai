@@ -100,15 +100,27 @@ def _setup_local(data_dir, archive_name, target_dir, file_ids, archive_fmt):
 
 
 def _download_via_gdown(data_dir, archive_name, file_ids):
-    """Download files from Google Drive via gdown."""
+    """Download files from Google Drive via gdown.
+
+    Uses ``fuzzy=True`` so gdown can follow redirects / parse the large-file
+    "virus scan" confirmation page, and falls back to a manual confirm-token
+    extraction for files that still fail.
+    """
     logger.info("Downloading data via gdown...")
     import gdown
 
     for fid in file_ids:
         url = f"https://drive.google.com/uc?id={fid}"
         out = os.path.join(data_dir, f"{fid}.zip")
-        if not os.path.exists(out):
-            gdown.download(url, out, quiet=False)
+        if os.path.exists(out):
+            continue
+        try:
+            gdown.download(url, out, quiet=False, fuzzy=True)
+        except gdown.exceptions.FileURLRetrievalError:
+            logger.warning(
+                f"gdown failed for {fid}; retrying with confirm-token fallback..."
+            )
+            _download_with_confirm(fid, out)
 
     # Merge multiple downloads into one archive if needed
     # (for now, treat each file as a separate archive and extract them all)
@@ -118,6 +130,41 @@ def _download_via_gdown(data_dir, archive_name, file_ids):
             _extract(data_dir, f"{fid}.zip", os.path.join(data_dir, fid))
 
     logger.info("Download complete")
+
+
+def _download_with_confirm(file_id, out_path):
+    """Fallback downloader for large files behind Google's virus-scan page.
+
+    Fetches the confirmation token from the initial response and re-requests
+    with ``confirm=<token>``. Raises on failure with an actionable message.
+    """
+    import requests
+
+    session = requests.Session()
+    base_url = "https://drive.google.com/uc?export=download"
+    resp = session.get(base_url, params={"id": file_id}, stream=True)
+    token = None
+    for key, value in resp.cookies.items():
+        if key.startswith("download_warning"):
+            token = value
+            break
+    if token is None:
+        # No confirm token -> permission / quota problem, not a large file.
+        raise RuntimeError(
+            "Could not retrieve a download confirmation token. The Drive item "
+            "is likely not shared as 'Anyone with the link' (Viewer), or has hit "
+            "a quota. Set sharing to 'Anyone with the link' and retry."
+        )
+    resp = session.get(
+        base_url,
+        params={"id": file_id, "confirm": token},
+        stream=True,
+    )
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=32768):
+            if chunk:
+                f.write(chunk)
 
 
 def _extract(data_dir, archive_name, target_dir):
