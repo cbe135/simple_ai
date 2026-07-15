@@ -1,0 +1,36 @@
+task: diabetic_retinopathy
+model:
+  model_id: google/medgemma-4b-it
+  ollama_model: medgemma:4b
+  quantize: 4bit
+  attn_implementation: eager
+  trust_remote_code: false
+data:
+  train_percentage: 0.8
+  val_percentage: 0.1
+  test_percentage: 0.1
+  image_size: 896
+  num_workers: 4
+  seed: 888
+  stratify: true
+prompt: "What is the {condition} grade (0-4) of this {modality} image? Respond with only the grade."
+modality: retinal fundus
+condition: diabetic retinopathy
+label_map:
+  0: "grade 0"
+  1: "grade 1"
+  2: "grade 2"
+  3: "grade 3"
+  4: "grade 4"
+training:
+  num_epoch: 3
+  batch_size: 4
+  lr: 1e-4
+  lora_r: 8
+  lora_alpha: 16
+  lora_dropout: 0.05
+  warmup_ratio: 0.03
+  gradient_accumulation_steps: 1
+  max_length: 512
+  weight_decay: 0.0
+output_dir: outputs

@@ -21,6 +21,13 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "ipykernel",
     "jupyter",
+    "transformers>=4.45",
+    "peft>=0.13",
+    "bitsandbytes>=0.43; sys_platform == 'linux'",
+    "accelerate>=1.0",
+    "huggingface_hub>=0.25",
+    "datasets>=3.0",
+    "ollama>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +47,9 @@ simple_ai_autoresearch_train = "src.autoresearch_cli:main"
 simple_ai_autoresearch_setup = "src.autoresearch_setup:main"
 simple_ai_autoresearch_serve = "src.autoresearch_serve:main"
 simple_ai_autoresearch_save = "src.autoresearch_save:main"
+simple_ai_vlm_train = "vlm.cli:train_cmd"
+simple_ai_vlm_infer = "vlm.cli:infer_cmd"
+simple_ai_vlm_save = "vlm.cli:save_cmd"
 
 [tool.setuptools.packages.find]
-include = ["src*"]
+include = ["src*", "vlm*"]

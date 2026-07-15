@@ -11,8 +11,10 @@ venv/
 *.pth
 *.yaml
 !config.yaml
+!vlm/configs/*.yaml
 .ipynb_checkpoints/
 *.ipynb
 *.tsv
 *.log
 *.swp
+outputs/

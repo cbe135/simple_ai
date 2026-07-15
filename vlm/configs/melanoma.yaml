@@ -1,0 +1,33 @@
+task: melanoma
+model:
+  model_id: google/medgemma-4b-it
+  ollama_model: medgemma:4b
+  quantize: 4bit            # 4bit (QLoRA, CUDA) | none (pure LoRA)
+  attn_implementation: eager
+  trust_remote_code: false
+data:
+  train_percentage: 0.8
+  val_percentage: 0.1
+  test_percentage: 0.1
+  image_size: 896
+  num_workers: 4
+  seed: 888
+  stratify: true
+prompt: "Is this {modality} malignant melanoma? Answer yes or no."
+modality: skin lesion
+condition: melanoma
+label_map:
+  0: "no"
+  1: "yes"
+training:
+  num_epoch: 3
+  batch_size: 4
+  lr: 1e-4
+  lora_r: 8
+  lora_alpha: 16
+  lora_dropout: 0.05
+  warmup_ratio: 0.03
+  gradient_accumulation_steps: 1
+  max_length: 512
+  weight_decay: 0.0
+output_dir: outputs
