@@ -20,11 +20,29 @@ Examples
 """
 
 import argparse
+import logging
 import sys
+from logging import FileHandler, Formatter
 from pathlib import Path
 
 
 def main(argv=None):
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s.%(msecs)03d][%(levelname)5s](%(name)s) - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
+    )
+    _log_path = Path.cwd() / "autoresearch.log"
+    _file_handler = FileHandler(_log_path)
+    _file_handler.setFormatter(
+        Formatter(
+            "[%(asctime)s.%(msecs)03d][%(levelname)5s](%(name)s) - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+    logging.getLogger().addHandler(_file_handler)
+
     parser = argparse.ArgumentParser(
         prog="simple_ai_autoresearch_train",
         description="Autonomously improve classification training by editing config.yaml.",
