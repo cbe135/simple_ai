@@ -14,9 +14,48 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 
+import requests
+from huggingface_hub import HfHubHTTPError
+
 logger = logging.getLogger(__name__)
+
+
+def _is_transient_hub_error(exc) -> bool:
+    """True for retryable HF/network errors (504/502/503/500/429, timeouts, conn resets)."""
+    if isinstance(exc, HfHubHTTPError):
+        resp = getattr(exc, "response", None)
+        return resp is not None and resp.status_code in (429, 500, 502, 503, 504)
+    if isinstance(exc, (requests.exceptions.ConnectionError,
+                        requests.exceptions.Timeout,
+                        requests.exceptions.ChunkedEncodingError)):
+        return True
+    if isinstance(exc, requests.exceptions.HTTPError):
+        resp = getattr(exc, "response", None)
+        return resp is not None and resp.status_code in (429, 500, 502, 503, 504)
+    return False
+
+
+def _load_with_retry(loader, max_retries=5, base_wait=5, **kwargs):
+    """Call ``loader(**kwargs)``, retrying on transient HF/network errors with exp backoff."""
+    last = None
+    for attempt in range(max_retries):
+        try:
+            return loader(**kwargs)
+        except Exception as exc:
+            if _is_transient_hub_error(exc) and attempt < max_retries - 1:
+                wait = base_wait * (2 ** attempt)
+                logger.warning(
+                    "Transient HF/network error (%s); retrying in %ss (attempt %d/%d)...",
+                    exc, wait, attempt + 1, max_retries,
+                )
+                time.sleep(wait)
+                last = exc
+                continue
+            raise
+    raise last
 
 
 def auto_device() -> str:
@@ -65,8 +104,17 @@ def _load_base_model(model_id: str, cfg: dict, device: str, quantize: str):
 
     logger.info("Loading base model %s on %s (quantize=%s)…", model_id, device, quantize)
 
+    # If resolve_base_dir redirected to a locally cached copy, load fully offline
+    # (no HEAD request to the Hub, so a Hub outage 504 can never break a cached run).
+    local_only = model_id != cfg["model"]["model_id"]
+
     try:
-        processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=trust)
+        processor = _load_with_retry(
+            AutoProcessor.from_pretrained,
+            pretrained_model_name_or_path=model_id,
+            trust_remote_code=trust,
+            local_files_only=local_only,
+        )
     except Exception as exc:
         raise_if_gated(model_id, exc)
 
@@ -80,12 +128,14 @@ def _load_base_model(model_id: str, cfg: dict, device: str, quantize: str):
             bnb_4bit_use_double_quant=True,
         )
         try:
-            model = AutoModelForImageTextToText.from_pretrained(
-                model_id,
+            model = _load_with_retry(
+                AutoModelForImageTextToText.from_pretrained,
+                pretrained_model_name_or_path=model_id,
                 quantization_config=bnb,
                 device_map="auto",
                 attn_implementation=attn,
                 trust_remote_code=trust,
+                local_files_only=local_only,
             )
         except Exception as exc:
             raise_if_gated(model_id, exc)
@@ -104,11 +154,13 @@ def _load_base_model(model_id: str, cfg: dict, device: str, quantize: str):
             )
         dtype = torch.bfloat16 if device == "cuda" else torch.float32
         try:
-            model = AutoModelForImageTextToText.from_pretrained(
-                model_id,
+            model = _load_with_retry(
+                AutoModelForImageTextToText.from_pretrained,
+                pretrained_model_name_or_path=model_id,
                 torch_dtype=dtype,
                 attn_implementation=attn,
                 trust_remote_code=trust,
+                local_files_only=local_only,
             )
         except Exception as exc:
             raise_if_gated(model_id, exc)
