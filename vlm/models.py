@@ -18,7 +18,13 @@ import time
 from pathlib import Path
 
 import requests
-from huggingface_hub import HfHubHTTPError
+try:
+    from huggingface_hub import HfHubHTTPError
+except ImportError:
+    try:
+        from huggingface_hub.errors import HfHubHTTPError
+    except ImportError:
+        from huggingface_hub.utils import HfHubHTTPError
 
 logger = logging.getLogger(__name__)
 

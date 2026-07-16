@@ -96,6 +96,7 @@ def train_pipeline(cfg: dict, data_dir, base_dir=None, device=None, quantize=Non
     out_base = Path(cfg.get("output_dir", "outputs"))
     run_dir = out_base / cfg["task"] / datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
+    adapter_dir = run_dir / "adapter"
     logger.info("Run output directory: %s", run_dir)
 
     t = cfg["training"]
@@ -134,7 +135,6 @@ def train_pipeline(cfg: dict, data_dir, base_dir=None, device=None, quantize=Non
     # Persist the LoRA adapter (the fine-tuned result) + processor + resolved config.
     # The callback already writes the best adapter (by eval loss) directly into
     # adapter_dir on each improvement; if no eval ran, fall back to the final model.
-    adapter_dir = run_dir / "adapter"
     if not (adapter_dir / "adapter_model").exists() and not (adapter_dir / "adapter_model.safetensors").exists():
         model.save_pretrained(adapter_dir)
         processor.save_pretrained(adapter_dir)
