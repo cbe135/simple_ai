@@ -13,7 +13,6 @@ Ollama store to Drive so zero-shot Ollama inference also survives restarts.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import shutil
@@ -78,17 +77,6 @@ def save_model(model_id: str, ollama_model: str | None, models_dir: Path) -> Non
     models_dir.mkdir(parents=True, exist_ok=True)
 
     dest = save_hf_base(model_id, models_dir)
-
-    # Manifest so train/infer can resolve the cache by id.
-    manifest = models_dir / "manifest.json"
-    data = {}
-    if manifest.exists():
-        try:
-            data = json.loads(manifest.read_text())
-        except Exception:
-            data = {}
-    data[model_id] = str(dest)
-    manifest.write_text(json.dumps(data, indent=2))
 
     if ollama_model:
         save_ollama_base(ollama_model, models_dir)
