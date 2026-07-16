@@ -144,6 +144,37 @@ def _assert_4bit_active(model):
         )
 
 
+def _downcast_lm_head(model):
+    """Replace the fp32 CastToFloat lm_head with a plain bf16 Linear.
+
+    Saves ~1.1 GiB on a 7B VLM. Safe because the head is never updated during
+    QLoRA (only the LoRA-adapter proj layers train); we just need logits.
+    """
+    import torch
+
+    try:
+        from peft.utils import CastToFloat
+    except Exception:
+        try:
+            from peft.utils.other import CastToFloat
+        except Exception:
+            CastToFloat = None
+
+    lm = model.get_output_embeddings()
+    if CastToFloat is None or not isinstance(lm, CastToFloat):
+        return
+    orig = lm.float16_linear
+    device = orig.weight.device
+    new_lm = torch.nn.Linear(orig.in_features, orig.out_features, bias=orig.bias is not None)
+    with torch.no_grad():
+        new_lm.weight.copy_(orig.weight.to(torch.bfloat16))
+        if orig.bias is not None:
+            new_lm.bias.copy_(orig.bias.to(torch.bfloat16))
+    new_lm = new_lm.to(torch.bfloat16).to(device)
+    model.set_output_embeddings(new_lm)
+    logger.info("lm_head recast to bf16 (~1.1 GiB saved).")
+
+
 def _lora_targets(model) -> list[str]:
     """Pick LoRA target modules that actually exist in the model."""
     candidates = [
@@ -192,6 +223,11 @@ def load_for_training(cfg: dict, base_dir: str | None = None, device: str | None
     if quantize_eff == "4bit":
         from peft import prepare_model_for_kbit_training
         model = prepare_model_for_kbit_training(model)
+        # prepare_model_for_kbit_training wraps the lm_head in fp32 (CastToFloat),
+        # i.e. ~2.18 GiB for a 7B VLM. We don't train the head (LoRA targets the
+        # attention/MLP proj layers), so keep it in bf16 to reclaim ~1.1 GiB — the
+        # difference between OOM and fitting on a 14 GiB T4.
+        _downcast_lm_head(model)
     model = apply_lora(model, cfg)
     model.print_trainable_parameters() if hasattr(model, "print_trainable_parameters") else None
     return model, processor, device
