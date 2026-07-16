@@ -38,6 +38,19 @@ def _base_dir_arg(args) -> str | None:
     return args.base_dir or os.environ.get("SIMPLE_AI_VLM_BASE_DIR")
 
 
+def _log_run_context(command: str, config_path: str | None = None):
+    """Print the git commit (and config path) so it's clear which code is running."""
+    import subprocess
+
+    try:
+        _commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+    except Exception:
+        _commit = "unknown"
+    print(f">>> vlm {command} starting — commit={_commit}", flush=True)
+    if config_path:
+        print(f">>> config: {config_path}", flush=True)
+
+
 def _common(p: argparse.ArgumentParser):
     p.add_argument("--config", required=True, help="Path to a vlm config YAML (e.g. vlm/configs/melanoma.yaml).")
     p.add_argument("--data-dir", required=True, help="Directory containing data_list.yaml + images/.")
@@ -52,6 +65,7 @@ def train_cmd():
     p.add_argument("--quantize", default=None, choices=["4bit", "none"], help="Override config quantize.")
     p.add_argument("--output-dir", default=None, help="Override config output_dir.")
     args = p.parse_args()
+    _log_run_context("train", args.config)
 
     from .config import load_config
     from .train import train_pipeline
@@ -74,6 +88,7 @@ def infer_cmd():
     p.add_argument("--backend", default="hf", choices=["hf", "ollama"])
     p.add_argument("--quantize", default=None, choices=["4bit", "none"])
     args = p.parse_args()
+    _log_run_context("infer", args.config)
 
     from .config import load_config
     from .infer import infer_pipeline
@@ -88,6 +103,7 @@ def infer_cmd():
 
 def save_cmd():
     _setup_logging()
+    _log_run_context("save")
     # `save` has its own argument set (see vlm/vlm/save.py).
     from .save import save_cmd as _save
 
