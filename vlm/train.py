@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -20,8 +19,8 @@ logger = logging.getLogger(__name__)
 class BestEvalLossCallback(TrainerCallback):
     """Snapshot the LoRA adapter whenever eval (validation) loss reaches a new low."""
 
-    def __init__(self, run_dir, processor):
-        self.run_dir = Path(run_dir)
+    def __init__(self, adapter_dir, processor):
+        self.adapter_dir = Path(adapter_dir)
         self.processor = processor
         self.best_loss = float("inf")
 
@@ -30,15 +29,14 @@ class BestEvalLossCallback(TrainerCallback):
         if loss is None or loss >= self.best_loss:
             return
         self.best_loss = loss
-        best_dir = self.run_dir / "best"
-        best_dir.mkdir(parents=True, exist_ok=True)
-        model.save_pretrained(best_dir)
-        self.processor.save_pretrained(best_dir)
-        (best_dir / "best_eval_loss.txt").write_text(f"{loss:.6f}")
-        (best_dir / "best_step.txt").write_text(str(state.global_step))
+        self.adapter_dir.mkdir(parents=True, exist_ok=True)
+        model.save_pretrained(self.adapter_dir)
+        self.processor.save_pretrained(self.adapter_dir)
+        (self.adapter_dir / "best_eval_loss.txt").write_text(f"{loss:.6f}")
+        (self.adapter_dir / "best_step.txt").write_text(str(state.global_step))
         logger.info(
             "New best eval_loss=%.4f at step %s -> saved adapter to %s",
-            loss, state.global_step, best_dir,
+            loss, state.global_step, self.adapter_dir,
         )
 
 
@@ -128,19 +126,16 @@ def train_pipeline(cfg: dict, data_dir, base_dir=None, device=None, quantize=Non
         train_dataset=ds_train,
         eval_dataset=ds_val,
         data_collator=collator,
-        callbacks=[BestEvalLossCallback(run_dir, processor)],
+        callbacks=[BestEvalLossCallback(adapter_dir, processor)],
     )
     trainer.train()
     _save_loss_curve(run_dir, trainer.state.log_history)
 
     # Persist the LoRA adapter (the fine-tuned result) + processor + resolved config.
+    # The callback already writes the best adapter (by eval loss) directly into
+    # adapter_dir on each improvement; if no eval ran, fall back to the final model.
     adapter_dir = run_dir / "adapter"
-    best_dir = run_dir / "best"
-    if best_dir.exists():
-        shutil.copytree(best_dir, adapter_dir, dirs_exist_ok=True)
-        logger.info("Best model (eval_loss=%.4f) copied to %s",
-                    float((best_dir / "best_eval_loss.txt").read_text()), adapter_dir)
-    else:
+    if not (adapter_dir / "adapter_model").exists() and not (adapter_dir / "adapter_model.safetensors").exists():
         model.save_pretrained(adapter_dir)
         processor.save_pretrained(adapter_dir)
     (adapter_dir / "base_model_id.txt").write_text(cfg["model"]["model_id"])
