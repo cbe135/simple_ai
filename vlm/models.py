@@ -113,8 +113,35 @@ def _load_base_model(model_id: str, cfg: dict, device: str, quantize: str):
         except Exception as exc:
             raise_if_gated(model_id, exc)
             model.to(device)
+    if use_4bit:
+        _assert_4bit_active(model)
     logger.info("Base model loaded on %s.", device)
     return model, processor
+
+
+def _assert_4bit_active(model):
+    """Fail loudly if a 4-bit QLoRA request did not actually quantize.
+
+    A silent fallback to bf16 would make a 7B model load in ~14GB and OOM
+    on a T4 later with a confusing traceback. Catch it up front instead.
+    """
+    loaded_4bit = getattr(model, "is_loaded_in_4bit", False)
+    if not loaded_4bit:
+        try:
+            from bitsandbytes.nn import Linear4bit
+        except Exception:
+            Linear4bit = None
+        if Linear4bit is not None:
+            loaded_4bit = any(
+                isinstance(m, Linear4bit) for m in model.modules()
+            )
+    if not loaded_4bit:
+        raise RuntimeError(
+            "Requested 4-bit QLoRA but the model is NOT loaded in 4-bit "
+            "(bitsandbytes likely failed or was skipped). A 7B model in full "
+            "precision will OOM on a T4. Fix bitsandbytes on the GPU runtime, "
+            "use a larger GPU (L4 24GB / A100), or switch to a smaller model."
+        )
 
 
 def _lora_targets(model) -> list[str]:
