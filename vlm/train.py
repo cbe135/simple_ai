@@ -4,14 +4,42 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 from datetime import datetime
 from pathlib import Path
+
+from transformers import TrainerCallback
 
 from .config import save_config
 from .data import VLMDataset, VLMCollator, build_samples, load_data_list, split_indices
 from .models import load_for_training
 
 logger = logging.getLogger(__name__)
+
+
+class BestEvalLossCallback(TrainerCallback):
+    """Snapshot the LoRA adapter whenever eval (validation) loss reaches a new low."""
+
+    def __init__(self, run_dir, processor):
+        self.run_dir = Path(run_dir)
+        self.processor = processor
+        self.best_loss = float("inf")
+
+    def on_evaluate(self, args, state, control, model=None, metrics=None, **kwargs):
+        loss = (metrics or {}).get("eval_loss")
+        if loss is None or loss >= self.best_loss:
+            return
+        self.best_loss = loss
+        best_dir = self.run_dir / "best"
+        best_dir.mkdir(parents=True, exist_ok=True)
+        model.save_pretrained(best_dir)
+        self.processor.save_pretrained(best_dir)
+        (best_dir / "best_eval_loss.txt").write_text(f"{loss:.6f}")
+        (best_dir / "best_step.txt").write_text(str(state.global_step))
+        logger.info(
+            "New best eval_loss=%.4f at step %s -> saved adapter to %s",
+            loss, state.global_step, best_dir,
+        )
 
 
 def _save_loss_curve(run_dir, log_history):
@@ -100,14 +128,21 @@ def train_pipeline(cfg: dict, data_dir, base_dir=None, device=None, quantize=Non
         train_dataset=ds_train,
         eval_dataset=ds_val,
         data_collator=collator,
+        callbacks=[BestEvalLossCallback(run_dir, processor)],
     )
     trainer.train()
     _save_loss_curve(run_dir, trainer.state.log_history)
 
     # Persist the LoRA adapter (the fine-tuned result) + processor + resolved config.
     adapter_dir = run_dir / "adapter"
-    model.save_pretrained(adapter_dir)
-    processor.save_pretrained(adapter_dir)
+    best_dir = run_dir / "best"
+    if best_dir.exists():
+        shutil.copytree(best_dir, adapter_dir, dirs_exist_ok=True)
+        logger.info("Best model (eval_loss=%.4f) copied to %s",
+                    float((best_dir / "best_eval_loss.txt").read_text()), adapter_dir)
+    else:
+        model.save_pretrained(adapter_dir)
+        processor.save_pretrained(adapter_dir)
     (adapter_dir / "base_model_id.txt").write_text(cfg["model"]["model_id"])
     save_config(cfg, run_dir / "vlm_config.yaml")
 
