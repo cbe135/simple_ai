@@ -38,6 +38,21 @@ def _base_dir_arg(args) -> str | None:
     return args.base_dir or os.environ.get("SIMPLE_AI_VLM_BASE_DIR")
 
 
+def _log_effective_config(cfg: dict, quantize_override=None):
+    """Log the resolved config so it's obvious which values actually took effect."""
+    m = cfg.get("model", {})
+    t = cfg.get("training", {})
+    d = cfg.get("data", {})
+    q = quantize_override or m.get("quantize")
+    logger.info(
+        "Effective config -> model_id=%s quantize=%s image_size=%s batch_size=%s "
+        "num_epoch=%s lr=%s lora_r=%s max_length=%s output_dir=%s",
+        m.get("model_id"), q, d.get("image_size"), t.get("batch_size"),
+        t.get("num_epoch"), t.get("lr"), t.get("lora_r"),
+        t.get("max_length"), cfg.get("output_dir"),
+    )
+
+
 def _log_run_context(command: str, config_path: str | None = None):
     """Print the git commit (and config path) so it's clear which code is running."""
     import subprocess
@@ -73,6 +88,7 @@ def train_cmd():
     cfg = load_config(args.config)
     if args.output_dir:
         cfg["output_dir"] = args.output_dir
+    _log_effective_config(cfg, quantize_override=args.quantize)
     run_dir, adapter = train_pipeline(
         cfg, args.data_dir, base_dir=_base_dir_arg(args), device=args.device, quantize=args.quantize
     )
@@ -94,6 +110,7 @@ def infer_cmd():
     from .infer import infer_pipeline
 
     cfg = load_config(args.config)
+    _log_effective_config(cfg, quantize_override=args.quantize)
     infer_pipeline(
         cfg, args.data_dir, split=args.split, adapter=args.adapter,
         base_dir=_base_dir_arg(args), device=args.device, quantize=args.quantize,
