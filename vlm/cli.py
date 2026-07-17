@@ -22,6 +22,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from src.cli_help import add_default_flag, parse_with_default
+
 
 def _setup_logging():
     load_dotenv()  # pick up .env (e.g. HF_TOKEN) for huggingface_hub
@@ -79,7 +81,8 @@ def train_cmd():
     _common(p)
     p.add_argument("--quantize", default=None, choices=["4bit", "none"], help="Override config quantize.")
     p.add_argument("--output-dir", default=None, help="Override config output_dir.")
-    args = p.parse_args()
+    add_default_flag(p)
+    args = parse_with_default(p)
     _log_run_context("train", args.config)
 
     from .config import load_config
@@ -103,7 +106,8 @@ def infer_cmd():
     p.add_argument("--split", default="test", choices=["train", "val", "test"])
     p.add_argument("--backend", default="hf", choices=["hf", "ollama"])
     p.add_argument("--quantize", default=None, choices=["4bit", "none"])
-    args = p.parse_args()
+    add_default_flag(p)
+    args = parse_with_default(p)
     _log_run_context("infer", args.config)
 
     from .config import load_config
@@ -130,11 +134,12 @@ def save_cmd():
 if __name__ == "__main__":
     # Allow `python -m vlm.cli train|infer|save ...`
     _setup_logging()
-    which = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in ("train", "infer", "save") else "train"
-    sys.argv = [sys.argv[0]] + sys.argv[2:] if which != "train" else sys.argv
-    if which == "train":
+    sub = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in ("train", "infer", "save") else "train"
+    rest = sys.argv[2:] if (len(sys.argv) > 1 and sys.argv[1] in ("train", "infer", "save")) else sys.argv[1:]
+    sys.argv = [sys.argv[0]] + rest
+    if sub == "train":
         train_cmd()
-    elif which == "infer":
+    elif sub == "infer":
         infer_cmd()
     else:
         save_cmd()

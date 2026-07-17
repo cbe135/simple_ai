@@ -89,13 +89,16 @@ def save_model(model_id: str, ollama_model: str | None, models_dir: Path) -> Non
 def save_cmd():
     import argparse
 
+    from src.cli_help import add_default_flag, parse_with_default
+
     p = argparse.ArgumentParser(description="Cache the VLM base model (HF, optionally Ollama).")
     p.add_argument("--model-id", default="Qwen/Qwen2.5-VL-7B-Instruct", help="HF base model id.")
     p.add_argument("--models-dir", default=None,
                    help="Directory to cache the base model in (default: Drive on Colab, else ./vlm_models).")
     p.add_argument("--ollama-model", default=None, help="Also cache this Ollama base (e.g. qwen2.5vl:7b).")
     p.add_argument("--ollama", action="store_true", help="Shorthand to also cache `qwen2.5vl:7b` via Ollama.")
-    args = p.parse_args()
+    add_default_flag(p)
+    args = parse_with_default(p)
 
     models_dir = Path(args.models_dir) if args.models_dir else default_models_dir()
     ollama_model = args.ollama_model or ("qwen2.5vl:7b" if (args.ollama or args.ollama_model) else None)

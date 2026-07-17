@@ -26,6 +26,7 @@ import subprocess
 import sys
 import time
 
+from src.cli_help import add_default_flag, parse_with_default
 from .autoresearch import (
     OLLAMA_PORT,
     _ollama_reachable,
@@ -267,7 +268,8 @@ def main(argv=None):
         "$OLLAMA_MODELS. The pulled model is stored here (e.g. a Google Drive mount "
         "to persist across sessions).",
     )
-    args = parser.parse_args(argv)
+    add_default_flag(parser)
+    args = parse_with_default(parser, argv)
 
     models_dir = apply_models_dir(args.models_dir)
     logger.info("Ollama models directory: %s", models_dir)

@@ -59,6 +59,19 @@ python src/prepare_data.py \
 Or place your data manually so that `--data-dir` points at the folder
 holding `images/`, `masks/` (if any), and `data_list.yaml`.
 
+**Parameters** (`simple_ai_train_data --help` for the live list):
+
+| Argument | Default | Description |
+|---|---|---|
+| `--data-dir` | *(required)* | Target dir that will contain `data_list.yaml`. |
+| `--data-name` | `None` | Dataset name used for archive naming (default: basename of `--data-dir`). |
+| `--file-ids` | `None` | One or more Google Drive file IDs to download via gdown. |
+| `--gdown-id` | `None` | Single Google Drive file ID (sets `--file-ids`). |
+| `--archive-format` | `zip` | Archive format: `zip` or `tar.gz`. |
+| `--config` | `None` | Optional config YAML providing `environ.data_source` / `environ.data_name`. |
+| `--default` | `False` | Print CLI parameter defaults and exit. |
+| `--help` | — | Print usage and exit. |
+
 ### Data format
 
 Each dataset directory follows:
@@ -131,6 +144,23 @@ python src/main.py --config config.yaml --data-dir /content/liver_data
 
 ```
 python src/main.py --config CONFIG_FILE --data-dir DATA_DIR --modality MODALITY [--output-dir OUTPUT_DIR]
+```
+
+**Global flags (every `simple_ai_*` console script):**
+
+- `--help` — print the full usage and parameter list, then exit.
+- `--default` — print the **default value of every CLI parameter** and exit.
+  These are the command's own argument defaults; they do **not** include the
+  values from `config.yaml` (the config defaults are "useless" for CLI discovery).
+
+For example:
+
+```bash
+simple_ai_train --help
+simple_ai_train --default
+simple_ai_train_data --default
+simple_ai_autoresearch_train --default
+simple_ai_vlm_train --default
 ```
 
 | Argument | Description |
@@ -634,16 +664,40 @@ simple_ai_autoresearch_train --remote --data-dir /content/dataset \
     --model meta-llama/llama-3.1-8b-instruct:free --runs 12
 ```
 
-Options: `--data-dir`, `--config` (default `config.yaml`),
-`--experiments` (default `experiments.tsv`), `--model`, `--base-url`,
-`--ollama-base-url` (remote Ollama URL with --local, e.g. `https://x.loca.lt/v1`),
-`--local` (default), `--remote` (use OpenRouter instead),
-`--unload-between-runs`, `--timeout` (default 700s),
-`--runs` (default 10), `--gdown-id`, `--data-name`,
-`--models-dir` (Ollama store; on Colab defaults to a Google Drive mount so
-weights persist — also settable via `$OLLAMA_MODELS`). The companion command
-`simple_ai_autoresearch_save` pulls (default `qwen2.5-coder:7b`; `--model` is
-repeatable) and copies the local Ollama store to Drive for reuse.
+Options (`simple_ai_autoresearch_train --help` for the live list; `--default`
+prints every default and exits without running):
+
+| Argument | Default | Description |
+|---|---|---|
+| `--data-dir` | `None` | Dataset directory for training. |
+| `--modality` | `None` | Imaging modality (key of `modalities` in config.yaml). Required unless `--default`. |
+| `--config` | `config.yaml` | Config YAML path (edited in place). |
+| `--experiments` | `experiments.tsv` | TSV log of all runs. |
+| `--model` | `None` | LLM model id (default depends on `--local`). |
+| `--base-url` | `None` | OpenAI-compatible base URL (default OpenRouter). Ignored with `--local`. |
+| `--ollama-base-url` | `None` | Remote Ollama server URL with `--local` (e.g. `https://x.loca.lt/v1`). |
+| `--local` | `True` | Use a local Ollama server (the default). |
+| `--remote` | (sets `--local=False`) | Use OpenRouter instead of local Ollama. |
+| `--unload-between-runs` | `False` | Unload the Ollama model between runs to free VRAM. |
+| `--timeout` | `700` | Training timeout (seconds). |
+| `--runs` | `10` | Number of optimization runs. |
+| `--log-level` | `INFO` | Logging verbosity. |
+| `--clear-cache` | `False` | Clear the persistent transformed-data cache before each run. |
+| `--gdown-id` | `None` | Google Drive file id to download first. |
+| `--data-name` | `None` | Dataset name used for archive naming. |
+| `--repo-root` | `None` | Repo root (default: current dir). |
+| `--models-dir` | `None` | Ollama models directory (Colab → Drive mount; also `$OLLAMA_MODELS`). |
+| `--provider` | `None` | Provider preset in `providers/<name>.json`. |
+| `--provider-config` | `None` | Path to a provider JSON (overrides `--provider`). |
+| `--api-key-env` | `None` | Env var name holding the API key. |
+| `--api-key` | `None` | Literal API key (prefer `--api-key-env` + `.env`). |
+
+The companion command `simple_ai_autoresearch_save` pulls (default
+`qwen2.5-coder:7b`; `--model` is repeatable) and copies the local Ollama store
+to Drive for reuse. `simple_ai_autoresearch_setup` / `simple_ai_autoresearch_serve`
+accept the same `--models-dir`, `--model`, `--no-pull`, `--no-verify-gpu`,
+`--force` (setup) and `--warm-start`, `--expose` (serve) flags — see
+`simple_ai_autoresearch_setup --help` / `simple_ai_autoresearch_serve --help`.
 
 ## Dependencies
 

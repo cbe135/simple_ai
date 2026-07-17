@@ -36,6 +36,21 @@ editing `model.model_id` in a config.
 uv sync                          # installs everything, no --extra needed
 ```
 
+## Global CLI flags (all `simple_ai_vlm_*` commands)
+
+Every VLM command accepts two global flags:
+
+- `--help` — print the full usage and parameter list, then exit.
+- `--default` — print the **default value of every CLI parameter** and exit.
+  These are the command's own argument defaults (e.g. `--split test`,
+  `--backend hf`); they do **not** include the values from your config YAML.
+
+```bash
+simple_ai_vlm_train --help
+simple_ai_vlm_infer --default
+simple_ai_vlm_save  --default
+```
+
 ## Cache the base model (so you don't re-download it every run)
 
 `simple_ai_vlm_save` downloads the Hugging Face base once and copies it to a
@@ -52,6 +67,17 @@ simple_ai_vlm_save --ollama                 # also caches the Ollama base (qwen2
 simple_ai_vlm_save --models-dir /path/to/vlm_models
 export SIMPLE_AI_VLM_BASE_DIR=/path/to/vlm_models
 ```
+
+**Parameters** (`simple_ai_vlm_save --help` for the live list):
+
+| Argument | Default | Description |
+|---|---|---|
+| `--model-id` | `Qwen/Qwen2.5-VL-7B-Instruct` | HF base model id to cache. |
+| `--models-dir` | `None` | Cache directory (Drive on Colab, else `./vlm_models`). |
+| `--ollama-model` | `None` | Also cache this Ollama base (e.g. `qwen2.5vl:7b`). |
+| `--ollama` | `False` | Shorthand to also cache `qwen2.5vl:7b` via Ollama. |
+| `--default` | `False` | Print CLI parameter defaults and exit. |
+| `--help` | — | Print usage and exit. |
 
 ## Gated models (MedGemma)
 
@@ -80,6 +106,19 @@ simple_ai_vlm_train \
     --base-dir /path/to/vlm_models
 ```
 
+**Parameters** (`simple_ai_vlm_train --help` for the live list):
+
+| Argument | Default | Description |
+|---|---|---|
+| `--config` | *(required)* | Path to a vlm config YAML (e.g. `vlm/configs/melanoma.yaml`). |
+| `--data-dir` | *(required)* | Directory containing `data_list.yaml` + `images/`. |
+| `--base-dir` | `None` | Cached base-model dir (from `simple_ai_vlm_save`). Falls back to the Hub. |
+| `--device` | `None` | `cuda` \| `mps` \| `cpu` (default: auto-detect). |
+| `--quantize` | `None` | `4bit` \| `none` — overrides the config. |
+| `--output-dir` | `None` | Overrides `output_dir` from the config. |
+| `--default` | `False` | Print CLI parameter defaults and exit. |
+| `--help` | — | Print usage and exit. |
+
 - `quantize: 4bit` (QLoRA) is used on **CUDA**; on Apple Silicon / CPU it
   auto-falls back to **pure LoRA** (`quantize: none`) since bitsandbytes 4-bit
   is CUDA-only. Override with `--quantize none`.
@@ -102,6 +141,21 @@ simple_ai_vlm_infer \
     --data-dir /path/to/isic_data \
     --backend ollama
 ```
+
+**Parameters** (`simple_ai_vlm_infer --help` for the live list):
+
+| Argument | Default | Description |
+|---|---|---|
+| `--config` | *(required)* | Path to a vlm config YAML. |
+| `--data-dir` | *(required)* | Directory containing `data_list.yaml` + `images/`. |
+| `--base-dir` | `None` | Cached base-model dir (from `simple_ai_vlm_save`). |
+| `--device` | `None` | `cuda` \| `mps` \| `cpu` (default: auto-detect). |
+| `--adapter` | `None` | Path to a saved LoRA adapter (hf backend). |
+| `--split` | `test` | `train` \| `val` \| `test`. |
+| `--backend` | `hf` | `hf` \| `ollama`. |
+| `--quantize` | `None` | `4bit` \| `none` — overrides the config. |
+| `--default` | `False` | Print CLI parameter defaults and exit. |
+| `--help` | — | Print usage and exit. |
 
 Artifacts written to `<cwd>/vlm/`: `predictions.csv`, `confusion_matrix.png`,
 `metrics.txt`, and (binary tasks) `roc.png` with AUC from yes/no token logits.

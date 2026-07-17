@@ -32,6 +32,7 @@ import logging
 import argparse
 
 from src.env_setup import detect_environment, default_data_dir
+from src.cli_help import add_default_flag, parse_with_default
 
 logger = logging.getLogger(__name__)
 
@@ -342,7 +343,8 @@ def main(argv=None):
             "archive_format) and environ.data_name as defaults."
         ),
     )
-    args = parser.parse_args(argv)
+    add_default_flag(parser)
+    args = parse_with_default(parser, argv)
 
     if args.gdown_id and not args.file_ids:
         args.file_ids = [args.gdown_id]

@@ -12,8 +12,11 @@ rebase/merge untouched, so stashing them is unnecessary and would otherwise make
 ``git stash pop`` fail with "No stash entries found".
 """
 
+import argparse
 import subprocess
 import sys
+
+from src.cli_help import add_default_flag, parse_with_default
 
 
 def _run(cmd):
@@ -22,6 +25,13 @@ def _run(cmd):
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        prog="simple_ai_git_pull",
+        description="Reconcile a divergent branch via git stash; git pull --rebase; git stash pop.",
+    )
+    add_default_flag(parser)
+    parse_with_default(parser)
+
     # Detect uncommitted tracked changes; ignore untracked `??` lines.
     status = subprocess.run(
         ["git", "status", "--porcelain"],

@@ -26,7 +26,8 @@ import sys
 from logging import FileHandler, Formatter
 from pathlib import Path
 
-from yaml import safe_dump, safe_load
+from src.cli_help import add_default_flag, parse_with_default
+from yaml import safe_load
 
 
 def _config_path_from_argv(argv):
@@ -173,15 +174,11 @@ def main(argv=None):
     parser.add_argument(
         "--default",
         action="store_true",
-        help="Print the default CLI argument values and the default training "
-        "config (config.yaml), then exit without running anything.",
+        help="Print the default CLI argument values and exit (does NOT include "
+        "config.yaml defaults).",
     )
 
-    args = parser.parse_args(argv)
-
-    if args.default:
-        _print_defaults(parser)
-        sys.exit(0)
+    args = parse_with_default(parser, argv)
 
     if not args.modality:
         parser.error("--modality is required (or pass --default to list defaults).")
@@ -206,27 +203,6 @@ def main(argv=None):
     from .autoresearch import run as ar_run
 
     ar_run(vars(args))
-
-
-def _print_defaults(parser):
-    """Print CLI argument defaults and the default training config, then exit."""
-    print("simple_ai_autoresearch_train — default values\n")
-
-    print("CLI argument defaults:")
-    seen = set()
-    for action in parser._actions:
-        if action.dest == "help" or not action.option_strings:
-            continue
-        if action.dest in seen:
-            continue
-        seen.add(action.dest)
-        flag = "/".join(action.option_strings)
-        print(f"  {flag} = {action.default!r}")
-
-    print("\nTraining config defaults (config.yaml):")
-    from src.defaults import DEFAULT_ARGS
-
-    print(safe_dump(DEFAULT_ARGS, sort_keys=False, default_flow_style=None))
 
 
 if __name__ == "__main__":

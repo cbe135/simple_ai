@@ -42,6 +42,7 @@ if not _IN_NOTEBOOK and "inline" in get_backend().lower():
 from yaml import safe_load
 from monai.utils.misc import set_determinism
 from src.defaults import DEFAULT_ARGS
+from src.cli_help import add_default_flag, parse_with_default
 
 logger = getLogger(__name__)
 
@@ -187,7 +188,8 @@ def main():
             "(CUDA if available, else MPS on Apple Silicon, else CPU)."
         ),
     )
-    args_cli = parser.parse_args()
+    add_default_flag(parser)
+    args_cli = parse_with_default(parser)
 
     # Send the default handler to stdout (not stderr). cli.py pipes stdout to
     # both the cell and run.log, so a single handler covers the console and the

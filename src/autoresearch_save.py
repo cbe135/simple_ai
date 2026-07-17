@@ -29,6 +29,7 @@ import logging
 import os
 import shutil
 
+from src.cli_help import add_default_flag, parse_with_default
 from .autoresearch import _ollama_reachable, pull_model
 from .autoresearch_paths import _resolve_shortcut
 from .autoresearch_setup import (
@@ -74,7 +75,8 @@ def main(argv=None):
         action="store_true",
         help="Do not pull any model; only copy the existing local store.",
     )
-    args = parser.parse_args(argv)
+    add_default_flag(parser)
+    args = parse_with_default(parser, argv)
 
     drive_dir = os.path.expanduser(args.drive_dir)
     # Mount Drive (if needed) and ensure the destination exists. We deliberately

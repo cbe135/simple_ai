@@ -33,6 +33,7 @@ import sys
 import tempfile
 import time
 
+from src.cli_help import add_default_flag, parse_with_default
 from .autoresearch import OLLAMA_PORT, _ollama_reachable, ensure_ollama_model
 from .autoresearch_setup import apply_models_dir, install_ollama
 
@@ -157,7 +158,8 @@ def main(argv=None):
         help="Expose the server to another Colab instance (default: localtunnel=public "
         "URL; proxy=Colab account-only URL; none=don't expose). The external URL is printed.",
     )
-    args = parser.parse_args(argv)
+    add_default_flag(parser)
+    args = parse_with_default(parser, argv)
 
     models_dir = apply_models_dir(args.models_dir)
     # ollama serve (and the training command's ollama calls) inherit this.
